@@ -3,6 +3,7 @@ package edu.unl.exceptionamplifier.resource;
 import java.io.IOException;
 import java.util.HashMap;
 import java.util.Map;
+import edu.unl.exceptionamplifier.mocker.ResourceMocker;
 
 /**
  * 一个相对复杂的被测资源类，模拟股票交易系统的伪代码。
@@ -62,7 +63,8 @@ public class StockTradingResource {
     /**
      * 伪API调用点，便于Mock异常注入
      */
-    private void mockApiCall(String apiCall) throws IOException {
-        // 实际调用时会被AspectJ/Mocker拦截进行异常注入
+    // 在每个需要模拟异常的 API 调用前调用此方法
+    private void mockApiCall(String apiCall) {
+        new ResourceMocker().mockResourceException(apiCall, "自动注入的异常类型");
     }
 }

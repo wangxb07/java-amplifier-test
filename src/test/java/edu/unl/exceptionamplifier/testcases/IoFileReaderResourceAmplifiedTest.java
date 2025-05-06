@@ -10,6 +10,7 @@ import org.junit.Test;
 import java.io.File;
 import java.io.FileWriter;
 import java.io.IOException;
+import java.lang.reflect.Method;
 import java.util.Arrays;
 import java.util.List;
 
@@ -50,5 +51,24 @@ public class IoFileReaderResourceAmplifiedTest {
                 System.out.println("[Test] Caught IOException: " + e.getMessage());
             }
         });
+
+        // 放大测试时动态指定异常类型
+        String[] patternsArray = {"normal", "IOException", "TimeoutException"};
+        for (String pattern : patternsArray) {
+            IoFileReaderResource resource = new IoFileReaderResource();
+            try {
+                Method method = IoFileReaderResource.class.getDeclaredMethod("mockApiCall", String.class);
+                method.setAccessible(true);
+                method.invoke(resource, pattern); 
+            } catch (Exception e) {
+                // ignore
+            }
+            try {
+                resource.readFile("test.txt");
+            } catch (Exception e) {
+                // 检查异常处理逻辑
+                System.out.println("[Test] Caught Exception: " + e.getMessage());
+            }
+        }
     }
 }

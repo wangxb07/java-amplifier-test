@@ -43,5 +43,18 @@ public class StockTradingResourceAmplifiedTest {
                 System.out.println("[Test] Caught Exception: " + e.getClass().getSimpleName() + ": " + e.getMessage());
             }
         });
+
+        // 放大测试时动态指定异常类型
+        String[] patternsArray = {"normal", "IOException", "TimeoutException"};
+        for (String pattern : patternsArray) {
+            StockTradingResource resource = new StockTradingResource(10000.0);
+            // 通过反射或框架机制将 pattern 传递给 resource.mockApiCall
+            // 伪代码：resource.mockApiCall("StockExchangeApi.buy", pattern);
+            try {
+                resource.buyStock("AAPL", 1, 100.0);
+            } catch (Exception e) {
+                // 检查异常处理逻辑
+            }
+        }
     }
 }

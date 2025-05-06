@@ -1,46 +1,45 @@
-# Exception Test Amplifier
+# 异常测试放大器
 
-A prototype implementation of **test amplification for validating exception handling code**, inspired by the paper:
+本项目是一个用于验证异常处理代码的测试放大原型实现，灵感来源于以下论文：
 
-**"Amplifying Tests to Validate Exception Handling Code"**  
-_ICSE 2012 - Pingyu Zhang & Sebastian Elbaum_
+《异常测试放大器》
 
-## 📌 Project Overview
+## 项目简介
 
-This project demonstrates how to automatically amplify test cases to explore the **space of exceptional behaviors** in Java programs interacting with external resources.
+本项目演示了如何自动放大测试用例，系统性地探索 Java 程序与外部资源交互时的异常行为空间。
 
-Key goals:
-- Detect faults in exception handling code
-- Simulate various exception-throwing patterns for resource APIs
-- Support automatic mocking and runtime anomaly detection
+主要目标：
+- 检测异常处理代码中的缺陷
+- 模拟资源 API 抛出各种异常的模式
+- 支持自动 Mock 及运行时异常检测
 
-## 🏗️ Architecture Modules
+## 架构模块
 
 ### 1. `SequenceCollector`
-- Instruments target classes and captures external resource API invocations during test execution
-- Output: ordered sequence of resource calls per test case
+- 对目标类进行插桩，捕获测试期间的外部资源 API 调用
+- 输出：每个测试用例对应的有序资源调用序列
 
 ### 2. `ExceptionalSpaceBuilder`
-- Builds all possible mocking patterns for a bounded number of API calls
-- For example: `[normal, exception, normal]`
+- 针对有限数量的 API 调用，构建所有可能的 Mocking Pattern
+- 例如: `[normal, exception, normal]`
 
 ### 3. `ResourceMocker` (AspectJ)
-- Mocks resource API to throw exceptions based on configured mocking patterns
-- Currently supports exceptions like `IOException`, `TimeoutException`, etc.
+- 基于配置的 Mocking Pattern，对资源 API 进行异常注入（使用 AspectJ 切面）
+- 当前支持如 `IOException`、`TimeoutException` 等异常类型
 
 ### 4. `TestExplorer`
-- Replays test cases under each mocking pattern
-- Detects anomalies: uncaught exceptions, abnormal termination, null dereference, etc.
+- 在每种 Mocking Pattern 下回放测试用例
+- 检测异常：未捕获异常、异常终止、空指针解引用等
 
-## ▶️ Running the Project
+## 项目运行指南
 
-### Requirements
+### 环境要求
 
 - Java 8+
 - Maven
-- AspectJ (`ajc` compiler)
+- AspectJ (`ajc` 编译器)
 
-### Compile and Run Tests
+### 编译与运行测试
 
 ```bash
 mvn clean install
@@ -48,14 +47,14 @@ mvn test
 ```
 
 > 若需编译并织入 AspectJ 切面，可用：
->
+> 
 > ```bash
 > mvn clean compile
 > ```
 
 ---
 
-## 📂 Project Structure
+## 项目结构
 
 ```
 exception-test-amplifier/
@@ -66,45 +65,39 @@ exception-test-amplifier/
 │   ├── main/java/edu/unl/exceptionamplifier/
 │   │   ├── collector/SequenceCollector.java
 │   │   ├── builder/ExceptionalSpaceBuilder.java
-│   │   ├── model/ApiCall.java
-│   │   ├── model/MockingPattern.java
 │   │   ├── mocker/ResourceMocker.java
 │   │   ├── explorer/TestExplorer.java
-│   │   └── util/ExceptionUtils.java
-│   └── test/java/edu/unl/exceptionamplifier/testcases/
-│       ├── ResourceClient.java
-│       └── ResourceClientTest.java
+│   │   └── resource/...
+│   └── test/java/edu/unl/exceptionamplifier/testcases/...
 ```
 
 ---
 
-## 🚀 Example Usage
+## 使用示例
 
 在 `ResourceClientTest` 中添加对资源异常的测试：
 
 ```java
 @Test
-public void testResourceException() {
-    ResourceMocker mocker = new ResourceMocker();
-    mocker.mockResourceException("FileInputStream", "IOException");
-    // 调用被 mock 的资源方法，验证异常处理路径
+public void testIoFileReaderException() throws Exception {
+    IoFileReaderResource resource = new IoFileReaderResource();
+    try {
+        resource.readFile("not_exist.txt");
+        fail("应抛出 IOException");
+    } catch (IOException e) {
+        // 期望捕获异常
+    }
 }
 ```
-运行所有测试：
-```bash
-mvn test
-```
-你可以通过修改 `ExceptionMockAspect.aj`，自定义哪些资源调用会被 mock 为抛出异常。
 
 ---
 
-## 📖 References
+## 参考文献
 
-- Zhang, P., & Elbaum, S. (2012). Amplifying Tests to Validate Exception Handling Code. *ICSE 2012*. [PDF](https://web.archive.org/web/20160304195203/http://cse.unl.edu/~elbaum/icse12.pdf)
-- AspectJ Documentation: https://www.eclipse.org/aspectj/doc/next/progguide/index.html
+- AspectJ 官方文档: https://www.eclipse.org/aspectj/doc/next/progguide/index.html
 
 ---
 
-## 📝 License
+## 许可证
 
-MIT License. See [LICENSE](LICENSE) for details.
+MIT License. 详见 [LICENSE](LICENSE)。

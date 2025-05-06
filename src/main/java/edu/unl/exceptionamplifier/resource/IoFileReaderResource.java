@@ -4,6 +4,7 @@ import java.io.BufferedReader;
 import java.io.File;
 import java.io.FileReader;
 import java.io.IOException;
+import edu.unl.exceptionamplifier.mocker.ResourceMocker;
 
 /**
  * 一个简单的被测资源类，演示如何读取文件内容。
@@ -25,5 +26,10 @@ public class IoFileReaderResource {
             }
         }
         return sb.toString();
+    }
+
+    // 在每个需要模拟异常的 API 调用前调用此方法
+    private void mockApiCall(String apiCall) {
+        new ResourceMocker().mockResourceException(apiCall, "自动注入的异常类型");
     }
 }
