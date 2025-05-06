@@ -1,0 +1,54 @@
+package edu.unl.exceptionamplifier.testcases;
+
+import edu.unl.exceptionamplifier.collector.SequenceCollector;
+import edu.unl.exceptionamplifier.builder.ExceptionalSpaceBuilder;
+import edu.unl.exceptionamplifier.explorer.TestExplorer;
+import edu.unl.exceptionamplifier.resource.IoFileReaderResource;
+
+import org.junit.Test;
+
+import java.io.File;
+import java.io.FileWriter;
+import java.io.IOException;
+import java.util.Arrays;
+import java.util.List;
+
+public class IoFileReaderResourceAmplifiedTest {
+    @Test
+    public void testReadFileWithAmplification() throws IOException {
+        // 1. 创建临时测试文件
+        File tempFile = File.createTempFile("testfile", ".txt");
+        tempFile.deleteOnExit();
+        try (FileWriter writer = new FileWriter(tempFile)) {
+            writer.write("Hello\nWorld\nTest");
+        }
+
+        // 2. 用 SequenceCollector 收集一次真实调用序列
+        SequenceCollector collector = new SequenceCollector();
+        // 这里模拟收集，实际可用AOP自动收集
+        collector.collect("FileReader.new");
+        collector.collect("BufferedReader.new");
+        collector.collect("BufferedReader.readLine");
+        collector.collect("BufferedReader.close");
+        List<String> apiCalls = collector.getSequence();
+
+        // 3. 构建异常类型集合
+        List<String> exceptionTypes = Arrays.asList("IOException");
+
+        // 4. 用 ExceptionalSpaceBuilder 生成所有mocking patterns
+        ExceptionalSpaceBuilder builder = new ExceptionalSpaceBuilder();
+        List<List<String>> patterns = builder.generateMockingPatterns(apiCalls, exceptionTypes);
+
+        // 5. 用 TestExplorer 对每种异常组合进行测试
+        TestExplorer explorer = new TestExplorer();
+        explorer.explore(apiCalls, patterns, () -> {
+            try {
+                IoFileReaderResource resource = new IoFileReaderResource();
+                String content = resource.readFile(tempFile.getAbsolutePath());
+                System.out.println("[Test] Content: " + content);
+            } catch (IOException e) {
+                System.out.println("[Test] Caught IOException: " + e.getMessage());
+            }
+        });
+    }
+}

@@ -1,0 +1,6 @@
+edu/unl/exceptionamplifier/testcases/ResourceClientTest.class
+edu/unl/exceptionamplifier/testcases/StockTradingResourceTest.class
+edu/unl/exceptionamplifier/testcases/ResourceClient.class
+edu/unl/exceptionamplifier/testcases/IoFileReaderResourceAmplifiedTest.class
+edu/unl/exceptionamplifier/testcases/IoFileReaderResourceTest.class
+edu/unl/exceptionamplifier/testcases/StockTradingResourceAmplifiedTest.class
