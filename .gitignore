@@ -1,0 +1,55 @@
+# Java & Maven
+*.class
+*.jar
+*.war
+*.ear
+*.iml
+*.log
+*.ctxt
+*.swp
+
+# Package Files #
+*.7z
+*.dmg
+*.gz
+*.iso
+*.jar
+*.rar
+*.tar
+*.zip
+
+# IDEs and editors
+/.idea/
+*.iws
+*.ipr
+*.iml
+/.classpath
+/.project
+/.settings/
+/.vscode/
+
+# Eclipse
+bin/
+*.tmp
+*.bak
+*.swp
+*~.nib
+local.properties
+
+# Maven
+/target/
+/logs/
+
+# Gradle
+/.gradle/
+build/
+
+# OS generated files
+.DS_Store
+Thumbs.db
+
+# Others
+*.orig
+
+# AspectJ
+*.ajc
