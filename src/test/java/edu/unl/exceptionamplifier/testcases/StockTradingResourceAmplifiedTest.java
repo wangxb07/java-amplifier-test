@@ -27,7 +27,7 @@ public class StockTradingResourceAmplifiedTest {
 
         // 3. 生成所有mocking patterns
         ExceptionalSpaceBuilder builder = new ExceptionalSpaceBuilder();
-        List<List<String>> patterns = builder.generateMockingPatterns(apiCalls, exceptionTypes);
+        List<List<String>> patterns = builder.generateMockingPatterns(apiCalls, exceptionTypes, true);
 
         // 4. 用 TestExplorer 对每种异常组合进行测试
         TestExplorer explorer = new TestExplorer();

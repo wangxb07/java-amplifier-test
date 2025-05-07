@@ -13,6 +13,18 @@
         <maven.compiler.target>1.8</maven.compiler.target>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
     </properties>
+    <repositories>
+        <repository>
+            <id>aliyun-public</id>
+            <name>Aliyun Public Repository</name>
+            <url>https://maven.aliyun.com/repository/public</url>
+        </repository>
+        <repository>
+            <id>central</id>
+            <name>Maven Central Repository</name>
+            <url>https://repo.maven.apache.org/maven2</url>
+        </repository>
+    </repositories>
     <dependencies>
         <dependency>
             <groupId>junit</groupId>
@@ -30,7 +42,24 @@
             <artifactId>aspectjweaver</artifactId>
             <version>1.9.19</version>
         </dependency>
-    </dependencies>
+
+        <dependency>
+            <groupId>com.openai</groupId>
+            <artifactId>openai-java</artifactId>
+            <version>1.6.0</version>
+        </dependency>
+        <!-- dotenv-java for automatic .env loading -->
+    <dependency>
+        <groupId>io.github.cdimascio</groupId>
+        <artifactId>dotenv-java</artifactId>
+        <version>3.0.0</version>
+    </dependency>
+    <dependency>
+        <groupId>com.alibaba</groupId>
+        <artifactId>fastjson</artifactId>
+        <version>1.2.83</version>
+    </dependency>
+</dependencies>
     <build>
         <plugins>
             <plugin>
