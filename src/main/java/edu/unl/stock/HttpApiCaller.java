@@ -1,4 +1,4 @@
-package edu.unl.exceptionamplifier.resource;
+package edu.unl.stock;
 
 public interface HttpApiCaller {
     /**

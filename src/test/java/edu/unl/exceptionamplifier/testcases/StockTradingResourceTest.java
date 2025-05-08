@@ -1,16 +1,16 @@
 package edu.unl.exceptionamplifier.testcases;
 
-import edu.unl.exceptionamplifier.resource.StockTradingResource;
-import edu.unl.exceptionamplifier.resource.RemoteApiException;
-import edu.unl.exceptionamplifier.resource.InsufficientBalanceException;
-import edu.unl.exceptionamplifier.resource.PositionNotEnoughException;
+import edu.unl.stock.StockTradingResource;
+import edu.unl.stock.RemoteApiException;
+import edu.unl.stock.InsufficientBalanceException;
+import edu.unl.stock.PositionNotEnoughException;
 import org.junit.Test;
 
 import java.io.IOException;
 
 import static org.junit.Assert.*;
 
-import edu.unl.exceptionamplifier.resource.HttpApiCaller;
+import edu.unl.stock.HttpApiCaller;
 
 public class StockTradingResourceTest {
     @Test

@@ -1,4 +1,4 @@
-package edu.unl.exceptionamplifier.resource;
+package edu.unl.stock;
 
 import java.net.HttpURLConnection;
 import java.net.URL;
