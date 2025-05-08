@@ -19,9 +19,9 @@ public class TestExplorer {
      * 遍历所有资源-异常组合并执行回放，检测异常情况
      * @param resources 资源API调用名列表（如 FileInputStream）
      * @param patterns 每种模式对应每个资源的异常类型或normal
-     * @param runnable 测试用例回放逻辑（通常为lambda表达式）
+     * @param testLogic 测试用例回放逻辑，带pattern参数
      */
-    public void explore(List<String> resources, List<List<String>> patterns, Runnable runnable) {
+    public void explore(List<String> resources, List<List<String>> patterns, java.util.function.Consumer<List<String>> testLogic) {
         for (List<String> pattern : patterns) {
             System.out.println("[TestExplorer] Pattern: " + pattern);
             try {
@@ -33,7 +33,7 @@ public class TestExplorer {
                         mocker.mockResourceException(resource, ex);
                     }
                 }
-                runnable.run();
+                testLogic.accept(pattern);
                 System.out.println("[TestExplorer] Test finished without uncaught exception.");
             } catch (Exception e) {
                 System.out.println("[TestExplorer] Caught exception: " + e);

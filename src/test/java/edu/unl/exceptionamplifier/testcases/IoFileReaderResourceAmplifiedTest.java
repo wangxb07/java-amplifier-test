@@ -42,7 +42,7 @@ public class IoFileReaderResourceAmplifiedTest {
 
         // 5. 用 TestExplorer 对每种异常组合进行测试
         TestExplorer explorer = new TestExplorer();
-        explorer.explore(apiCalls, patterns, () -> {
+        explorer.explore(apiCalls, patterns, (pattern) -> {
             try {
                 IoFileReaderResource resource = new IoFileReaderResource();
                 String content = resource.readFile(tempFile.getAbsolutePath());
