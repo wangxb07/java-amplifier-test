@@ -9,7 +9,7 @@ public class MockMarketDataService implements MarketDataService {
 
     @Override
     public double getRealtimePrice(String symbol) throws IOException {
-        // 模拟价格：10~100元之间浮动
-        return 10 + random.nextDouble() * 90;
+        // 返回固定价格，保证测试稳定
+        return 100.0;
     }
 }

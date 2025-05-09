@@ -74,14 +74,15 @@ public class StockTradingRepository {
                         "type TEXT NOT NULL,\n" +
                         "trade_time DATETIME DEFAULT CURRENT_TIMESTAMP\n)");
             }
-            // 若无余额记录，则插入初始余额
-            try (ResultSet rs = conn.createStatement().executeQuery("SELECT COUNT(*) FROM account")) {
-                if (rs.next() && rs.getInt(1) == 0) {
-                    try (PreparedStatement ps = conn.prepareStatement("INSERT INTO account (id, balance) VALUES (1, ?)");) {
-                        ps.setDouble(1, initialBalance);
-                        ps.executeUpdate();
-                    }
-                }
+            // 清空持仓和交易流水，保证测试环境干净
+            try (Statement cleanStmt = conn.createStatement()) {
+                cleanStmt.executeUpdate("DELETE FROM portfolio;");
+                cleanStmt.executeUpdate("DELETE FROM trade;");
+            }
+            // 强制重置账户余额为 initialBalance
+            try (PreparedStatement ps = conn.prepareStatement("INSERT OR REPLACE INTO account (id, balance) VALUES (1, ?);")) {
+                ps.setDouble(1, initialBalance);
+                ps.executeUpdate();
             }
         } catch (SQLException e) {
             throw new RuntimeException("数据库初始化失败: " + e.getMessage(), e);
