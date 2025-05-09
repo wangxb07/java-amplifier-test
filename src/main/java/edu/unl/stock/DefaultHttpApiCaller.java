@@ -8,6 +8,15 @@ public class DefaultHttpApiCaller implements HttpApiCaller {
     @Override
     public void call(String apiCall) throws RemoteApiException {
         try {
+            // 根据不同的API调用抛出相应的异常
+            if (apiCall.contains("502")) {
+                throw new RemoteApiException("远程API调用失败: HTTP 502 Bad Gateway");
+            } else if (apiCall.contains("disconnect")) {
+                throw new RemoteApiException("远程API调用失败: 连接断开");
+            } else if (apiCall.contains("timeout")) {
+                throw new RemoteApiException("远程API调用失败: 请求超时");
+            }
+
             // 假设远程API地址如下（仅为演示）
             URL url = new URL("http://api.example.com/mock?api=" + apiCall);
             HttpURLConnection conn = (HttpURLConnection) url.openConnection();

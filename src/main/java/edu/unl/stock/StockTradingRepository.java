@@ -27,35 +27,32 @@ public class StockTradingRepository {
      * @return 操作结果
      * @throws IOException 如果数据库操作失败
      */
-    public <T> T runInTransaction(Function<Connection, T> action) throws IOException {
+    private <T> T runInTransaction(Function<Connection, T> action) throws IOException, SQLException, java.util.concurrent.TimeoutException, InsufficientBalanceException {
         Connection conn = null;
-        boolean originalAutoCommit = true;
+        boolean autoCommit = true;
         try {
             conn = getConnection();
-            originalAutoCommit = conn.getAutoCommit();
-            conn.setAutoCommit(false); // 开启事务
-            
-            T result = action.apply(conn); // 执行操作
-            
-            conn.commit(); // 提交事务
+            autoCommit = conn.getAutoCommit();
+            conn.setAutoCommit(false);
+            T result = action.apply(conn);
+            conn.commit();
             return result;
         } catch (SQLException e) {
             if (conn != null) {
                 try {
-                    conn.rollback(); // 发生异常时回滚
+                    conn.rollback();
                 } catch (SQLException ex) {
-                    throw new IOException("事务回滚失败: " + ex.getMessage(), ex);
+                    throw new IOException("回滚事务失败: " + ex.getMessage(), ex);
                 }
             }
-            throw new IOException("事务执行失败: " + e.getMessage(), e);
+            throw e;
         } finally {
             if (conn != null) {
                 try {
-                    conn.setAutoCommit(originalAutoCommit); // 恢复原始设置
+                    conn.setAutoCommit(autoCommit);
                     conn.close();
                 } catch (SQLException e) {
-                    // 记录关闭连接失败，但不抛出异常
-                    System.err.println("关闭数据库连接失败: " + e.getMessage());
+                    throw new IOException("关闭数据库连接失败: " + e.getMessage(), e);
                 }
             }
         }
@@ -185,7 +182,23 @@ public class StockTradingRepository {
         runInTransaction(conn -> {
             try {
                 // 计算金额
-                double amount = quantity * price * ("buy".equals(type) ? -1 : 1);
+                double amount = quantity * price;  // 买入为负，卖出为正
+                if ("buy".equals(type)) {
+                    amount = -amount;  // 买入时金额为负
+                }
+                
+                // 买入时检查余额
+                if ("buy".equals(type)) {
+                    double balance;
+                    try {
+                        balance = getBalance();
+                        if (balance < -amount) {
+                            throw new InsufficientBalanceException("余额不足，当前余额: " + balance + ", 需要: " + (-amount));
+                        }
+                    } catch (Exception e) {
+                        throw new RuntimeException("检查余额失败: " + e.getMessage(), e);
+                    }
+                }
                 
                 // 1. 更新余额
                 try (PreparedStatement ps = conn.prepareStatement("UPDATE account SET balance = balance + ? WHERE id=1")) {
@@ -196,11 +209,11 @@ public class StockTradingRepository {
                 // 2. 更新持仓
                 int positionDelta = "buy".equals(type) ? quantity : -quantity;
                 int oldQty;
-try {
-    oldQty = getPositionWithConnection(conn, symbol);
-} catch (java.util.concurrent.TimeoutException | InsufficientBalanceException e) {
-    throw new RuntimeException(e);
-}
+                try {
+                    oldQty = getPositionWithConnection(conn, symbol);
+                } catch (Exception e) {
+                    throw new RuntimeException(e);
+                }
                 
                 if (oldQty == 0 && positionDelta > 0) {
                     try (PreparedStatement ps = conn.prepareStatement("INSERT INTO portfolio (symbol, quantity) VALUES (?, ?)")) {

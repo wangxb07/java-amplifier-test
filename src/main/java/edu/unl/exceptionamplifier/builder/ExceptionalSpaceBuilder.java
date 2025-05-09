@@ -4,6 +4,9 @@ import java.util.HashSet;
 import java.util.Set;
 import java.util.List;
 import java.util.ArrayList;
+import java.util.Collections;
+import java.util.Map;
+import java.util.HashMap;
 import com.openai.client.OpenAIClient;
 import com.openai.client.okhttp.OpenAIOkHttpClient;
 import com.openai.models.ChatModel;
@@ -15,6 +18,22 @@ import com.alibaba.fastjson.JSONArray;
 
 public class ExceptionalSpaceBuilder {
     private final Set<String> exceptionSpace = new HashSet<>();
+    private final Map<String, Double> exceptionWeights = new HashMap<>();
+    private final Map<String, Double> apiRiskScores = new HashMap<>();
+    private double coverageThreshold = 0.8; // 默认覆盖率阈值
+
+    public ExceptionalSpaceBuilder() {
+        // 初始化异常权重
+        exceptionWeights.put("IOException", 0.8);
+        exceptionWeights.put("TimeoutException", 0.7);
+        exceptionWeights.put("RemoteApiException", 0.9);
+        exceptionWeights.put("PositionNotEnoughException", 0.6);
+        exceptionWeights.put("InsufficientBalanceException", 0.5);
+    }
+
+    public void setCoverageThreshold(double threshold) {
+        this.coverageThreshold = threshold;
+    }
 
     public void addException(String exception) {
         exceptionSpace.add(exception);
@@ -25,37 +44,104 @@ public class ExceptionalSpaceBuilder {
     }
 
     /**
-     * 生成所有可能的Mocking Pattern组合，例如 [normal, exception, normal]
-     * @param apiCalls API调用序列
-     * @param exceptionTypes 支持的异常类型
-     * @return 所有组合，每个组合是一个对应于apiCalls的异常/normal列表
+     * 计算API调用的风险分数
      */
+    private Map<String, Double> calculateApiRiskScores(List<String> apiCalls) {
+        Map<String, Double> scores = new HashMap<>();
+        for (String apiCall : apiCalls) {
+            // 基于API名称和调用位置计算风险分数
+            double score = 1.0;
+            if (apiCall.contains("buy") || apiCall.contains("sell")) {
+                score *= 1.5; // 交易相关API风险更高
+            }
+            if (apiCall.contains("Database")) {
+                score *= 1.2; // 数据库操作风险较高
+            }
+            scores.put(apiCall, score);
+        }
+        return scores;
+    }
+
     /**
-     * 生成所有可能的Mocking Pattern组合（支持 LLM 或回溯法）
-     * @param apiCalls API调用序列
-     * @param exceptionTypes 支持的异常类型
-     * @param useLLM 是否用LLM（如阿里云百炼）生成
-     * @return 所有组合，每个组合是一个对应于apiCalls的异常/normal列表
+     * 生成基于风险的测试用例
      */
-    public List<List<String>> generateMockingPatterns(List<String> apiCalls, List<String> exceptionTypes, boolean useLLM) {
-        if (apiCalls == null || apiCalls.isEmpty()) return new ArrayList<>();
-        if (useLLM) {
-            String prompt = "已知API调用序列：" + apiCalls +
-                    "\n支持的异常类型：" + exceptionTypes +
-                    "\n请为每个API调用点生成所有可能的Mocking Pattern组合，每个组合是一个长度为" + apiCalls.size() +
-                    "的列表，元素为normal或异常类型，返回JSON格式的Java List<List<String>>，不要有多余解释。";
-            String llmResponse = callLLM(prompt);
-            return parseMockPatterns(llmResponse);
-        } else {
-            List<List<String>> results = new ArrayList<>();
-            backtrack(apiCalls.size(), exceptionTypes, new ArrayList<>(), results);
-            return results;
+    public List<List<String>> generateRiskBasedPatterns(List<String> apiCalls, 
+                                                      List<String> exceptionTypes,
+                                                      double coverageThreshold) {
+        this.coverageThreshold = coverageThreshold;
+        List<List<String>> patterns = new ArrayList<>();
+        apiRiskScores.putAll(calculateApiRiskScores(apiCalls));
+        
+        // 生成初始测试用例
+        patterns.add(Collections.nCopies(apiCalls.size(), "normal")); // 正常情况
+        
+        // 为每个API生成单个异常的情况
+        for (String apiCall : apiCalls) {
+            for (String exception : exceptionTypes) {
+                List<String> pattern = new ArrayList<>(Collections.nCopies(apiCalls.size(), "normal"));
+                pattern.set(apiCalls.indexOf(apiCall), exception);
+                patterns.add(pattern);
+            }
+        }
+        
+        // 生成高风险组合
+        generateHighRiskPatterns(apiCalls, exceptionTypes, patterns);
+        
+        return patterns;
+    }
+
+    /**
+     * 生成高风险组合的测试用例
+     */
+    private void generateHighRiskPatterns(List<String> apiCalls, 
+                                        List<String> exceptionTypes,
+                                        List<List<String>> patterns) {
+        // 识别高风险API组合
+        List<String> highRiskApis = new ArrayList<>();
+        for (Map.Entry<String, Double> entry : apiRiskScores.entrySet()) {
+            if (entry.getValue() > 1.2) { // 风险分数阈值
+                highRiskApis.add(entry.getKey());
+            }
+        }
+        
+        // 为高风险API生成异常组合
+        for (int i = 0; i < highRiskApis.size(); i++) {
+            for (int j = i + 1; j < highRiskApis.size(); j++) {
+                for (String ex1 : exceptionTypes) {
+                    for (String ex2 : exceptionTypes) {
+                        List<String> pattern = new ArrayList<>(Collections.nCopies(apiCalls.size(), "normal"));
+                        pattern.set(apiCalls.indexOf(highRiskApis.get(i)), ex1);
+                        pattern.set(apiCalls.indexOf(highRiskApis.get(j)), ex2);
+                        patterns.add(pattern);
+                    }
+                }
+            }
         }
     }
 
-    // 保持兼容性，原有方法调用新方法（默认不用LLM）
+    // 保持原有方法以兼容现有代码
     public List<List<String>> generateMockingPatterns(List<String> apiCalls, List<String> exceptionTypes) {
-        return generateMockingPatterns(apiCalls, exceptionTypes, false);
+        return generateRiskBasedPatterns(apiCalls, exceptionTypes, 0.8);
+    }
+
+    public List<List<String>> generateMockingPatterns(List<String> apiCalls, 
+                                                    List<String> exceptionTypes, 
+                                                    boolean useLLM) {
+        if (useLLM) {
+            return generateMockingPatternsWithLLM(apiCalls, exceptionTypes);
+        }
+        return generateRiskBasedPatterns(apiCalls, exceptionTypes, 0.8);
+    }
+
+    private List<List<String>> generateMockingPatternsWithLLM(List<String> apiCalls, 
+                                                            List<String> exceptionTypes) {
+        // 使用LLM生成测试用例的逻辑保持不变
+        String prompt = "已知API调用序列：" + apiCalls +
+                "\n支持的异常类型：" + exceptionTypes +
+                "\n请为每个API调用点生成所有可能的Mocking Pattern组合，每个组合是一个长度为" + apiCalls.size() +
+                "的列表，元素为normal或异常类型，返回JSON格式的Java List<List<String>>，不要有多余解释。";
+        String llmResponse = callLLM(prompt);
+        return parseMockPatterns(llmResponse);
     }
 
     /**
@@ -137,22 +223,5 @@ ChatCompletionCreateParams params = ChatCompletionCreateParams.builder()
             e.printStackTrace();
         }
         return patterns;
-    }
-
-    private void backtrack(int n, List<String> exceptionTypes, List<String> current, List<List<String>> results) {
-        if (current.size() == n) {
-            results.add(new ArrayList<>(current));
-            return;
-        }
-        // normal
-        current.add("normal");
-        backtrack(n, exceptionTypes, current, results);
-        current.remove(current.size() - 1);
-        // each exception
-        for (String ex : exceptionTypes) {
-            current.add(ex);
-            backtrack(n, exceptionTypes, current, results);
-            current.remove(current.size() - 1);
-        }
     }
 }
