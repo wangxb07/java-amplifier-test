@@ -22,7 +22,7 @@ public class StockTradingService {
     /**
      * 买入股票，自动获取实时价格
      */
-    public void buyStock(String symbol, int quantity) throws IOException, SQLException, TimeoutException, InsufficientBalanceException {
+    public void buyStock(String symbol, int quantity) throws IOException, SQLException, TimeoutException, InsufficientBalanceException, RemoteApiException {
         // 基础参数校验
         if (symbol == null || symbol.isEmpty()) {
             throw new IllegalArgumentException("股票代码不能为空");
@@ -35,12 +35,7 @@ public class StockTradingService {
         }
 
         // 获取实时价格
-        double price;
-        try {
-            price = marketDataService.getRealtimePrice(symbol);
-        } catch (IOException e) {
-            throw new IOException("获取实时价格失败: " + e.getMessage());
-        }
+        double price = marketDataService.getRealtimePrice(symbol);
 
         // 价格校验
         if (price < MIN_PRICE) {
@@ -54,8 +49,6 @@ public class StockTradingService {
         int currentPosition;
         try {
             currentPosition = repository.getPosition(symbol);
-        } catch (IOException e) {
-            throw new IOException("获取持仓信息失败: " + e.getMessage());
         } catch (InsufficientBalanceException e) {
             throw new InsufficientBalanceException("获取持仓信息时余额不足: " + e.getMessage());
         }
@@ -70,8 +63,6 @@ public class StockTradingService {
         double balance;
         try {
             balance = repository.getBalance();
-        } catch (IOException e) {
-            throw new IOException("获取账户余额失败: " + e.getMessage());
         } catch (InsufficientBalanceException e) {
             throw new InsufficientBalanceException("获取余额信息时余额不足: " + e.getMessage());
         }
@@ -96,7 +87,7 @@ public class StockTradingService {
     /**
      * 卖出股票，自动获取实时价格
      */
-    public void sellStock(String symbol, int quantity) throws IOException, SQLException, TimeoutException, PositionNotEnoughException, InsufficientBalanceException {
+    public void sellStock(String symbol, int quantity) throws IOException, SQLException, TimeoutException, PositionNotEnoughException, InsufficientBalanceException, RemoteApiException {
         // 基础参数校验
         if (symbol == null || symbol.isEmpty()) {
             throw new IllegalArgumentException("股票代码不能为空");
@@ -112,8 +103,6 @@ public class StockTradingService {
         int currentPosition;
         try {
             currentPosition = repository.getPosition(symbol);
-        } catch (IOException e) {
-            throw new IOException("获取持仓信息失败: " + e.getMessage());
         } catch (InsufficientBalanceException e) {
             // 卖出时忽略余额不足异常
             currentPosition = 0;
@@ -124,12 +113,7 @@ public class StockTradingService {
         }
 
         // 获取实时价格
-        double price;
-        try {
-            price = marketDataService.getRealtimePrice(symbol);
-        } catch (IOException e) {
-            throw new IOException("获取实时价格失败: " + e.getMessage());
-        }
+        double price = marketDataService.getRealtimePrice(symbol);
 
         // 价格校验
         if (price < MIN_PRICE) {
@@ -151,11 +135,9 @@ public class StockTradingService {
         }
     }
 
-    public double getBalance() throws IOException, SQLException, TimeoutException, InsufficientBalanceException {
+    public double getBalance() throws SQLException, TimeoutException, InsufficientBalanceException {
         try {
             return repository.getBalance();
-        } catch (IOException e) {
-            throw new IOException("获取账户余额失败: " + e.getMessage());
         } catch (SQLException e) {
             throw new SQLException("数据库操作失败: " + e.getMessage());
         } catch (TimeoutException e) {
@@ -165,14 +147,12 @@ public class StockTradingService {
         }
     }
 
-    public int getPosition(String symbol) throws IOException, SQLException, TimeoutException, InsufficientBalanceException {
+    public int getPosition(String symbol) throws SQLException, TimeoutException, InsufficientBalanceException {
         if (symbol == null || symbol.isEmpty()) {
             throw new IllegalArgumentException("股票代码不能为空");
         }
         try {
             return repository.getPosition(symbol);
-        } catch (IOException e) {
-            throw new IOException("获取持仓信息失败: " + e.getMessage());
         } catch (SQLException e) {
             throw new SQLException("数据库操作失败: " + e.getMessage());
         } catch (TimeoutException e) {

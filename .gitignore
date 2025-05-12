@@ -53,3 +53,4 @@ Thumbs.db
 
 # AspectJ
 *.ajc
+.DS_Store

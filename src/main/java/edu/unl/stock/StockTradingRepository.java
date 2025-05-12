@@ -1,6 +1,5 @@
 package edu.unl.stock;
 
-import java.io.IOException;
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.PreparedStatement;
@@ -25,9 +24,9 @@ public class StockTradingRepository {
      * @param action 要执行的操作，接收一个Connection并返回结果
      * @param <T> 返回结果类型
      * @return 操作结果
-     * @throws IOException 如果数据库操作失败
+     * @throws SQLException 如果数据库操作失败
      */
-    private <T> T runInTransaction(Function<Connection, T> action) throws IOException, SQLException, java.util.concurrent.TimeoutException, InsufficientBalanceException {
+    private <T> T runInTransaction(Function<Connection, T> action) throws SQLException, java.util.concurrent.TimeoutException, InsufficientBalanceException {
         Connection conn = null;
         boolean autoCommit = true;
         try {
@@ -42,7 +41,7 @@ public class StockTradingRepository {
                 try {
                     conn.rollback();
                 } catch (SQLException ex) {
-                    throw new IOException("回滚事务失败: " + ex.getMessage(), ex);
+                    throw new SQLException("回滚事务失败: " + ex.getMessage(), ex);
                 }
             }
             throw e;
@@ -52,7 +51,7 @@ public class StockTradingRepository {
                     conn.setAutoCommit(autoCommit);
                     conn.close();
                 } catch (SQLException e) {
-                    throw new IOException("关闭数据库连接失败: " + e.getMessage(), e);
+                    throw new SQLException("关闭数据库连接失败: " + e.getMessage(), e);
                 }
             }
         }
@@ -86,18 +85,16 @@ public class StockTradingRepository {
         }
     }
 
-    public void updateBalance(double amount) throws IOException {
+    public void updateBalance(double amount) throws SQLException {
         try (Connection conn = getConnection()) {
             try (PreparedStatement ps = conn.prepareStatement("UPDATE account SET balance = balance + ? WHERE id=1")) {
                 ps.setDouble(1, amount);
                 ps.executeUpdate();
             }
-        } catch (SQLException e) {
-            throw new IOException("数据库更新余额失败: " + e.getMessage(), e);
         }
     }
 
-    public void updatePosition(String symbol, int delta) throws IOException, SQLException, java.util.concurrent.TimeoutException, InsufficientBalanceException {
+    public void updatePosition(String symbol, int delta) throws SQLException, java.util.concurrent.TimeoutException, InsufficientBalanceException {
         try (Connection conn = getConnection()) {
             int oldQty = getPosition(symbol);
             if (oldQty == 0 && delta > 0) {
@@ -118,12 +115,10 @@ public class StockTradingRepository {
                     ps.executeUpdate();
                 }
             }
-        } catch (SQLException e) {
-            throw new IOException("数据库更新持仓失败: " + e.getMessage(), e);
         }
     }
 
-    public void insertTrade(String symbol, int quantity, double price, String type) throws SQLException, java.util.concurrent.TimeoutException, InsufficientBalanceException, IOException {
+    public void insertTrade(String symbol, int quantity, double price, String type) throws SQLException, java.util.concurrent.TimeoutException, InsufficientBalanceException {
         try (Connection conn = getConnection()) {
             try (PreparedStatement ps = conn.prepareStatement(
                     "INSERT INTO trade (symbol, quantity, price, type) VALUES (?, ?, ?, ?)")) {
@@ -133,26 +128,22 @@ public class StockTradingRepository {
                 ps.setString(4, type);
                 ps.executeUpdate();
             }
-        } catch (SQLException e) {
-            throw new IOException("数据库插入交易流水失败: " + e.getMessage(), e);
         }
     }
 
-    public double getBalance() throws IOException, SQLException, java.util.concurrent.TimeoutException, InsufficientBalanceException {
+    public double getBalance() throws SQLException, java.util.concurrent.TimeoutException, InsufficientBalanceException {
         try (Connection conn = getConnection();
              Statement stmt = conn.createStatement();
              ResultSet rs = stmt.executeQuery("SELECT balance FROM account WHERE id=1")) {
             if (rs.next()) {
                 return rs.getDouble(1);
             } else {
-                throw new IOException("未找到账户余额记录");
+                throw new SQLException("未找到账户余额记录");
             }
-        } catch (SQLException e) {
-            throw new IOException("数据库查询余额失败: " + e.getMessage(), e);
         }
     }
 
-    public int getPosition(String symbol) throws IOException, SQLException, java.util.concurrent.TimeoutException, InsufficientBalanceException {
+    public int getPosition(String symbol) throws SQLException, java.util.concurrent.TimeoutException, InsufficientBalanceException {
         try (Connection conn = getConnection();
              PreparedStatement ps = conn.prepareStatement("SELECT quantity FROM portfolio WHERE symbol=?")) {
             ps.setString(1, symbol);
@@ -163,8 +154,6 @@ public class StockTradingRepository {
                     return 0;
                 }
             }
-        } catch (SQLException e) {
-            throw new IOException("数据库查询持仓失败: " + e.getMessage(), e);
         }
     }
     
@@ -176,9 +165,9 @@ public class StockTradingRepository {
      * @param quantity 数量（买入为正，卖出为负）
      * @param price 价格
      * @param type 交易类型（"buy" 或 "sell"）
-     * @throws IOException 如果数据库操作失败
+     * @throws SQLException 如果数据库操作失败
      */
-    public void executeTradeTransaction(String symbol, int quantity, double price, String type) throws IOException, SQLException, java.util.concurrent.TimeoutException, InsufficientBalanceException {
+    public void executeTradeTransaction(String symbol, int quantity, double price, String type) throws SQLException, java.util.concurrent.TimeoutException, InsufficientBalanceException {
         runInTransaction(conn -> {
             try {
                 // 计算金额
