@@ -13,6 +13,9 @@ import java.io.IOException;
 import java.lang.reflect.Method;
 import java.util.Arrays;
 import java.util.List;
+import java.util.Map;
+import java.util.HashMap;
+import edu.unl.exceptionamplifier.util.ExceptionReflectionUtils;
 
 public class IoFileReaderResourceAmplifiedTest {
     @Test
@@ -32,6 +35,21 @@ public class IoFileReaderResourceAmplifiedTest {
         collector.collect("BufferedReader.readLine");
         collector.collect("BufferedReader.close");
         List<String> apiCalls = collector.getSequence();
+
+        // ---- START INTEGRATION ----
+        Map<String, String> fqcnMap = new HashMap<>();
+        // These FQCNs need to be accurate for the keys used in collector.collect()
+        // For example, if "FileReader.new" refers to a method in a specific class:
+        fqcnMap.put("FileReader", "java.io.FileReader"); // Assuming constructor calls are mapped to class
+        fqcnMap.put("BufferedReader", "java.io.BufferedReader");
+        // Add other necessary mappings here based on actual classes/methods for these keys
+
+        int totalDeclaredExceptionsInPath = 
+            ExceptionReflectionUtils.countDeclaredExceptions(apiCalls, fqcnMap);
+
+        System.out.println("API Call Sequence for IoFileReaderResource (intended path): " + apiCalls);
+        System.out.println("Total potential declared exception points in this intended path: " + totalDeclaredExceptionsInPath);
+        // ---- END INTEGRATION ----
 
         // 3. 构建异常类型集合
         List<String> exceptionTypes = Arrays.asList("IOException");

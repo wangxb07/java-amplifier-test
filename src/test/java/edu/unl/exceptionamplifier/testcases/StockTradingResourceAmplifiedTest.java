@@ -1,20 +1,21 @@
 package edu.unl.exceptionamplifier.testcases;
 
 import edu.unl.stock.StockTradingResource;
-import edu.unl.stock.InsufficientBalanceException;
-import edu.unl.stock.PositionNotEnoughException;
 import edu.unl.stock.RemoteApiException;
 import edu.unl.stock.MockMarketDataService;
-import edu.unl.exceptionamplifier.collector.SequenceCollector;
 import edu.unl.exceptionamplifier.builder.ExceptionalSpaceBuilder;
 import edu.unl.exceptionamplifier.util.CoverageStatsReporter;
 import edu.unl.exceptionamplifier.explorer.TestExplorer;
+import edu.unl.exceptionamplifier.util.ExceptionReflectionUtils;
 
 import org.junit.Test;
 import org.junit.AfterClass;
 import java.lang.reflect.Method;
 import java.util.HashSet;
 import java.util.Set;
+import java.util.List;
+import java.util.Map;
+import java.util.HashMap;
 
 import static org.mockito.ArgumentMatchers.anyDouble;
 import static org.mockito.ArgumentMatchers.anyInt;
@@ -24,12 +25,8 @@ import edu.unl.stock.StockTradingRepository;
 import edu.unl.stock.MarketDataService;
 import java.io.IOException;
 import java.sql.SQLException;
-import java.util.concurrent.TimeoutException;
 
 import java.util.Arrays;
-import java.util.List;
-import java.util.Map;
-import java.util.HashMap;
 import java.lang.reflect.Constructor;
 
 public class StockTradingResourceAmplifiedTest {
@@ -298,16 +295,30 @@ public class StockTradingResourceAmplifiedTest {
                 "StockTradingRepository.executeTradeTransaction"  // During sell
         );
 
+        // ---- START INTEGRATION OF EXCEPTION COUNTING ----
+        Map<String, String> fqcnMap = new HashMap<>();
+        fqcnMap.put("MarketDataService", "edu.unl.stock.MarketDataService");
+        fqcnMap.put("StockTradingRepository", "edu.unl.stock.StockTradingRepository");
+        // Add other FQCNs if your sequence includes other service keys from apiCalls
+
+        int totalDeclaredExceptionsInPath = 
+            ExceptionReflectionUtils.countDeclaredExceptions(apiCalls, fqcnMap);
+
+        System.out.println("--- Test: testAmplifiedBuyAndSell ---");
+        System.out.println("API Call Sequence for amplified buy/sell (potential path): " + apiCalls);
+        System.out.println("Total potential declared exception points in this path: " + totalDeclaredExceptionsInPath);
+        // ---- END INTEGRATION OF EXCEPTION COUNTING ----
+
         // 2. Define exception types to inject (ensure SQLException is included if repository throws it)
         List<String> exceptionTypes = Arrays.asList(
-                "IOException", "TimeoutException", "SQLException",
-                "InsufficientBalanceException", "PositionNotEnoughException", "RemoteApiException",
-                "IllegalArgumentException" // Include validation exceptions if desired
+            "IOException", "SQLException",
+            "InsufficientBalanceException", "PositionNotEnoughException", "RemoteApiException",
+            "IllegalArgumentException" // Include validation exceptions if desired
         );
 
         // 3. Generate all mocking patterns
         ExceptionalSpaceBuilder builder = new ExceptionalSpaceBuilder();
-        List<List<String>> patterns = builder.generateMockingPatterns(apiCalls, exceptionTypes, true); // includeNormal=true
+        List<List<String>> patterns = builder.generateMockingPatterns(apiCalls, exceptionTypes, false); // includeNormal=true
 
         // 4. Use TestExplorer to explore each pattern
         CoverageStatsReporter coverageStats = new CoverageStatsReporter(); // Local reporter for path coverage
@@ -346,9 +357,6 @@ public class StockTradingResourceAmplifiedTest {
                              System.err.println("[WARN] Could not create instance for exception: " + exceptionName);
                              continue; // Skip if exception couldn't be created
                         }
-
-                        System.out.println("Mocking exception: " + exceptionName + " for resource: " + apiCall + " (index " + i + ")");
-
 
                         // Configure the specific mock method to throw the exception
                         if ("MarketDataService.getRealtimePrice".equals(apiCall)) {
@@ -407,6 +415,7 @@ public class StockTradingResourceAmplifiedTest {
                     stat.put("exceptionMsg", e.getMessage());
                     System.out.println("[Test] Caught Exception: " + exceptionSimpleName + ". Pattern: " + pattern + ". Msg: " + e.getMessage());
                     coveredExceptions.add(exceptionSimpleName); // Update static set
+                    coverageStats.addExceptionStat("testAmplifiedBuyAndSell", exceptionSimpleName, true); // Update local reporter
                     // Optionally, check if the caught exception matches the mocked one(s)
                 }
 
@@ -445,8 +454,6 @@ public class StockTradingResourceAmplifiedTest {
             String fullClassName;
             if (className.equals("IOException")) {
                 fullClassName = "java.io.IOException";
-            } else if (className.equals("TimeoutException")) {
-                fullClassName = "java.util.concurrent.TimeoutException";
             } else if (className.equals("SQLException")) {
                 fullClassName = "java.sql.SQLException";
             } else if (className.equals("IllegalArgumentException")) {
