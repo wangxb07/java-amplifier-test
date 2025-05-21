@@ -5,6 +5,7 @@ import edu.unl.stock.RemoteApiException;
 import edu.unl.stock.MockMarketDataService;
 import edu.unl.exceptionamplifier.builder.ExceptionalSpaceBuilder;
 import edu.unl.exceptionamplifier.util.CoverageStatsReporter;
+import edu.unl.exceptionamplifier.util.CoverageStatsReporter.ExceptionDetails;
 import edu.unl.exceptionamplifier.explorer.TestExplorer;
 import edu.unl.exceptionamplifier.util.ExceptionReflectionUtils;
 
@@ -27,12 +28,18 @@ import java.io.IOException;
 import java.sql.SQLException;
 
 import java.util.Arrays;
+
+import java.util.List;
+import java.util.Map;
+import java.util.HashMap;
+import java.util.stream.Collectors; // Added for Collectors.toList()
+
 import java.lang.reflect.Constructor;
 
 public class StockTradingResourceAmplifiedTest {
-    private static final CoverageStatsReporter reporter = new CoverageStatsReporter();
+    // private static final CoverageStatsReporter reporter = new CoverageStatsReporter(); // Commented out as it's not used by the amplified test logic directly for adding stats.
     private static final Set<String> requiredExceptions = new HashSet<>();
-    private static final Set<String> coveredExceptions = new HashSet<>();
+    private static final Set<String> coveredExceptions = new HashSet<>(); // This set is updated in the explorer lambda
 
     static {
         // 自动收集 StockTradingResource 和 StockTradingService 的所有 public 方法声明的异常类型
@@ -66,224 +73,7 @@ public class StockTradingResourceAmplifiedTest {
         System.out.printf("[异常覆盖率] %d/%d = %.2f%%\n", covered, total, rate * 100);
     }
 
-    @Test
-    public void testBuyStock_RealtimePriceIOException() throws Exception {
-        // Mock MarketDataService 抛 IOException
-        MarketDataService mockMarketData = mock(MarketDataService.class);
-        when(mockMarketData.getRealtimePrice(anyString())).thenThrow(new IOException("模拟HTTP请求失败"));
-        StockTradingRepository repo = new StockTradingRepository();
-        repo.initDatabase(10000.0);
-        edu.unl.stock.StockTradingService service = new edu.unl.stock.StockTradingService(repo, mockMarketData);
-        StockTradingResource resource = new StockTradingResource(service);
-        try {
-            resource.buyStock("AAPL", 10);
-            org.junit.Assert.fail("应当抛出 IOException");
-        } catch (IOException e) {
-            // 期望抛出
-            reporter.addExceptionStat("testBuyStock_RealtimePriceIOException", "IOException", true);
-        }
-    }
-
-    @Test
-    public void testBuyStock_TransactionSQLException() throws Exception {
-        // Mock StockTradingRepository 抛 SQLException
-        StockTradingRepository mockRepo = mock(StockTradingRepository.class);
-        when(mockRepo.getBalance()).thenReturn(10000.0);
-        when(mockRepo.getPosition(anyString())).thenReturn(0);
-        doThrow(new SQLException("模拟事务失败")).when(mockRepo).executeTradeTransaction(anyString(), anyInt(), anyDouble(), anyString());
-        MarketDataService marketData = mock(MarketDataService.class);
-        when(marketData.getRealtimePrice(anyString())).thenReturn(100.0);
-        edu.unl.stock.StockTradingService service = new edu.unl.stock.StockTradingService(mockRepo, marketData);
-        StockTradingResource resource = new StockTradingResource(service);
-        try {
-            resource.buyStock("AAPL", 10);
-            org.junit.Assert.fail("应当抛出 SQLException");
-        } catch (SQLException e) {
-            // 期望抛出
-        }
-        reporter.addExceptionStat("testBuyStock_TransactionSQLException", "SQLException", true);
-    }
-
-    @Test
-    public void testBuyStock_GetBalanceSQLException() throws Exception {
-        StockTradingRepository mockRepo = mock(StockTradingRepository.class);
-        when(mockRepo.getBalance()).thenThrow(new SQLException("模拟 getBalance 失败"));
-        MarketDataService marketData = mock(MarketDataService.class);
-        when(marketData.getRealtimePrice(anyString())).thenReturn(100.0);
-        edu.unl.stock.StockTradingService service = new edu.unl.stock.StockTradingService(mockRepo, marketData);
-        StockTradingResource resource = new StockTradingResource(service);
-        try {
-            resource.buyStock("AAPL", 10);
-            org.junit.Assert.fail("应当抛出 SQLException");
-        } catch (SQLException e) {
-            // 期望抛出
-        }
-        reporter.addExceptionStat("testBuyStock_GetBalanceSQLException", "SQLException", true);
-    }
-
-    @Test
-    public void testBuyStock_GetPositionSQLException() throws Exception {
-        StockTradingRepository mockRepo = mock(StockTradingRepository.class);
-        when(mockRepo.getBalance()).thenReturn(10000.0);
-        when(mockRepo.getPosition(anyString())).thenThrow(new SQLException("模拟 getPosition 失败"));
-        MarketDataService marketData = mock(MarketDataService.class);
-        when(marketData.getRealtimePrice(anyString())).thenReturn(100.0);
-        edu.unl.stock.StockTradingService service = new edu.unl.stock.StockTradingService(mockRepo, marketData);
-        StockTradingResource resource = new StockTradingResource(service);
-        try {
-            resource.buyStock("AAPL", 10);
-            org.junit.Assert.fail("应当抛出 SQLException");
-        } catch (SQLException e) {
-            // 期望抛出
-        }
-        reporter.addExceptionStat("testBuyStock_GetPositionSQLException", "SQLException", true);
-    }
-
-    @Test
-    public void testBuyStock_TransactionRuntimeException() throws Exception {
-        StockTradingRepository mockRepo = mock(StockTradingRepository.class);
-        when(mockRepo.getBalance()).thenReturn(10000.0);
-        when(mockRepo.getPosition(anyString())).thenReturn(0);
-        doThrow(new RuntimeException("模拟事务运行时异常")).when(mockRepo).executeTradeTransaction(anyString(), anyInt(), anyDouble(), anyString());
-        MarketDataService marketData = mock(MarketDataService.class);
-        when(marketData.getRealtimePrice(anyString())).thenReturn(100.0);
-        edu.unl.stock.StockTradingService service = new edu.unl.stock.StockTradingService(mockRepo, marketData);
-        StockTradingResource resource = new StockTradingResource(service);
-        try {
-            resource.buyStock("AAPL", 10);
-            org.junit.Assert.fail("应当抛出 RuntimeException");
-        } catch (RuntimeException e) {
-            // 期望抛出
-        }
-        reporter.addExceptionStat("testBuyStock_TransactionRuntimeException", "RuntimeException", true);
-    }
-
-    @Test
-    public void testBuyStock_RealtimePriceRuntimeException() throws Exception {
-        MarketDataService mockMarketData = mock(MarketDataService.class);
-        when(mockMarketData.getRealtimePrice(anyString())).thenThrow(new RuntimeException("模拟HTTP运行时异常"));
-        StockTradingRepository repo = new StockTradingRepository();
-        repo.initDatabase(10000.0);
-        edu.unl.stock.StockTradingService service = new edu.unl.stock.StockTradingService(repo, mockMarketData);
-        StockTradingResource resource = new StockTradingResource(service);
-        try {
-            resource.buyStock("AAPL", 10);
-            org.junit.Assert.fail("应当抛出 RuntimeException");
-        } catch (RuntimeException e) {
-            // 期望抛出
-        }
-        reporter.addExceptionStat("testBuyStock_RealtimePriceRuntimeException", "RuntimeException", true);
-    }
-
-    @Test
-    public void testBuyStock_TransactionInsufficientBalanceException() throws Exception {
-        StockTradingRepository mockRepo = mock(StockTradingRepository.class);
-        when(mockRepo.getBalance()).thenReturn(10000.0);
-        when(mockRepo.getPosition(anyString())).thenReturn(0);
-        doThrow(new edu.unl.stock.InsufficientBalanceException("余额不足")).when(mockRepo).executeTradeTransaction(anyString(), anyInt(), anyDouble(), anyString());
-        MarketDataService marketData = mock(MarketDataService.class);
-        when(marketData.getRealtimePrice(anyString())).thenReturn(100.0);
-        edu.unl.stock.StockTradingService service = new edu.unl.stock.StockTradingService(mockRepo, marketData);
-        StockTradingResource resource = new StockTradingResource(service);
-        try {
-            resource.buyStock("AAPL", 10);
-            org.junit.Assert.fail("应当抛出 InsufficientBalanceException");
-        } catch (edu.unl.stock.InsufficientBalanceException e) {
-            // 期望抛出
-        }
-        reporter.addExceptionStat("testBuyStock_TransactionInsufficientBalanceException", "InsufficientBalanceException", true);
-    }
-
-    @Test
-    public void testBuyStock_RealtimePriceNegative() throws Exception {
-        MarketDataService mockMarketData = mock(MarketDataService.class);
-        when(mockMarketData.getRealtimePrice(anyString())).thenReturn(-100.0);
-        StockTradingRepository repo = new StockTradingRepository();
-        repo.initDatabase(10000.0);
-        edu.unl.stock.StockTradingService service = new edu.unl.stock.StockTradingService(repo, mockMarketData);
-        StockTradingResource resource = new StockTradingResource(service);
-        try {
-            resource.buyStock("AAPL", 10);
-            org.junit.Assert.fail("应当抛出 IllegalArgumentException");
-        } catch (IllegalArgumentException e) {
-            // 期望抛出
-        }
-        reporter.addExceptionStat("testBuyStock_RealtimePriceNegative", "IllegalArgumentException", true);
-    }
-
-    @Test
-    public void testBuyStock_TransactionTimeoutException() throws Exception {
-        StockTradingRepository mockRepo = mock(StockTradingRepository.class);
-        when(mockRepo.getBalance()).thenReturn(10000.0);
-        when(mockRepo.getPosition(anyString())).thenReturn(0);
-        doThrow(new java.util.concurrent.TimeoutException("模拟事务超时")).when(mockRepo).executeTradeTransaction(anyString(), anyInt(), anyDouble(), anyString());
-        MarketDataService marketData = mock(MarketDataService.class);
-        when(marketData.getRealtimePrice(anyString())).thenReturn(100.0);
-        edu.unl.stock.StockTradingService service = new edu.unl.stock.StockTradingService(mockRepo, marketData);
-        StockTradingResource resource = new StockTradingResource(service);
-        try {
-            resource.buyStock("AAPL", 10);
-            org.junit.Assert.fail("应当抛出 TimeoutException");
-        } catch (java.util.concurrent.TimeoutException e) {
-            // 期望抛出
-        }
-        reporter.addExceptionStat("testBuyStock_TransactionTimeoutException", "TimeoutException", true);
-    }
-
-    @Test
-    public void testBuyStock_InvalidSymbol() throws Exception {
-        StockTradingRepository repo = new StockTradingRepository();
-        repo.initDatabase(10000.0);
-        MarketDataService marketData = new MockMarketDataService();
-        edu.unl.stock.StockTradingService service = new edu.unl.stock.StockTradingService(repo, marketData);
-        StockTradingResource resource = new StockTradingResource(service);
-        try {
-            resource.buyStock("", 10);
-            org.junit.Assert.fail("应当抛出 IllegalArgumentException");
-        } catch (IllegalArgumentException e) {
-            // 期望抛出
-            reporter.addExceptionStat("testBuyStock_InvalidSymbol", "IllegalArgumentException", true);
-        }
-    }
-
-    @Test
-    public void testBuyStock_InvalidQuantity() throws Exception {
-        StockTradingRepository repo = new StockTradingRepository();
-        repo.initDatabase(10000.0);
-        MarketDataService marketData = new MockMarketDataService();
-        edu.unl.stock.StockTradingService service = new edu.unl.stock.StockTradingService(repo, marketData);
-        StockTradingResource resource = new StockTradingResource(service);
-        try {
-            resource.buyStock("AAPL", -1);
-            org.junit.Assert.fail("应当抛出 IllegalArgumentException");
-        } catch (IllegalArgumentException e) {
-            // 期望抛出
-            reporter.addExceptionStat("testBuyStock_InvalidQuantity", "IllegalArgumentException", true);
-        }
-    }
-
-    @Test
-    public void testBuyStock_RemoteApiException() throws Exception {
-        MarketDataService mockMarketData = mock(MarketDataService.class);
-        when(mockMarketData.getRealtimePrice(anyString())).thenThrow(new RemoteApiException("模拟远程API异常"));
-        StockTradingRepository repo = new StockTradingRepository();
-        repo.initDatabase(10000.0);
-        edu.unl.stock.StockTradingService service = new edu.unl.stock.StockTradingService(repo, mockMarketData);
-        StockTradingResource resource = new StockTradingResource(service);
-        boolean caught = false;
-        try {
-            resource.buyStock("AAPL", 10);
-            org.junit.Assert.fail("应当抛出 RemoteApiException");
-        } catch (Exception e) {
-            if (e instanceof RemoteApiException) {
-                caught = true;
-                reporter.addExceptionStat("testBuyStock_RemoteApiException", "RemoteApiException", true);
-            } else {
-                throw e;
-            }
-        }
-        org.junit.Assert.assertTrue("应当捕获到 RemoteApiException", caught);
-    }
+    // Individual @Test methods are removed as their functionality is covered by testAmplifiedBuyAndSell.
 
     @Test
     public void testAmplifiedBuyAndSell() {
@@ -413,6 +203,8 @@ public class StockTradingResourceAmplifiedTest {
                     String exceptionSimpleName = e.getClass().getSimpleName();
                     stat.put("exceptionType", exceptionSimpleName);
                     stat.put("exceptionMsg", e.getMessage());
+                    ExceptionDetails capturedDetails = buildExceptionDetailsChain(e, pattern.toString());
+                    coverageStats.addSutExceptionChain("testAmplifiedBuyAndSell", pattern.toString(), capturedDetails);
                     System.out.println("[Test] Caught Exception: " + exceptionSimpleName + ". Pattern: " + pattern + ". Msg: " + e.getMessage());
                     coveredExceptions.add(exceptionSimpleName); // Update static set
                     coverageStats.addExceptionStat("testAmplifiedBuyAndSell", exceptionSimpleName, true); // Update local reporter
@@ -445,6 +237,27 @@ public class StockTradingResourceAmplifiedTest {
         coverageStats.printCoverageTree();
 
         // The @AfterClass method will print the final exception coverage based on the static sets
+    }
+
+    private static ExceptionDetails buildExceptionDetailsChain(Throwable throwable, String inputPattern) {
+        if (throwable == null) {
+            return null;
+        }
+        List<String> stackTraceList = Arrays.stream(throwable.getStackTrace())
+                .map(ste -> String.format("%s.%s(%s:%d)",
+                        ste.getClassName(),
+                        ste.getMethodName(),
+                        ste.getFileName(),
+                        ste.getLineNumber()))
+                .collect(Collectors.toList());
+        ExceptionDetails causeDetails = buildExceptionDetailsChain(throwable.getCause(), inputPattern);
+        return new ExceptionDetails(
+                throwable.getClass().getName(),
+                throwable.getMessage(),
+                stackTraceList,
+                causeDetails,
+                inputPattern
+        );
     }
 
     // Helper method to create exception instances from class names
