@@ -17,18 +17,10 @@ import com.alibaba.fastjson.JSONArray;
 
 public class ExceptionalSpaceBuilder {
     private final Set<String> exceptionSpace = new HashSet<>();
-    private final Map<String, Double> exceptionWeights = new HashMap<>();
     private final Map<String, Double> apiRiskScores = new HashMap<>();
 
     public ExceptionalSpaceBuilder() {
-        // 初始化异常权重
-        exceptionWeights.put("IOException", 0.8);
-        exceptionWeights.put("TimeoutException", 0.7);
-        exceptionWeights.put("RemoteApiException", 0.9);
-        exceptionWeights.put("PositionNotEnoughException", 0.6);
-        exceptionWeights.put("InsufficientBalanceException", 0.5);
     }
-
 
     public void addException(String exception) {
         exceptionSpace.add(exception);
@@ -39,31 +31,11 @@ public class ExceptionalSpaceBuilder {
     }
 
     /**
-     * 计算API调用的风险分数
-     */
-    private Map<String, Double> calculateApiRiskScores(List<String> apiCalls) {
-        Map<String, Double> scores = new HashMap<>();
-        for (String apiCall : apiCalls) {
-            // 基于API名称和调用位置计算风险分数
-            double score = 1.0;
-            if (apiCall.contains("buy") || apiCall.contains("sell")) {
-                score *= 1.5; // 交易相关API风险更高
-            }
-            if (apiCall.contains("Database")) {
-                score *= 1.2; // 数据库操作风险较高
-            }
-            scores.put(apiCall, score);
-        }
-        return scores;
-    }
-
-    /**
      * 生成基于风险的测试用例
      */
     public List<List<String>> generateRiskBasedPatterns(List<String> apiCalls, 
                                                       List<String> exceptionTypes) {
         List<List<String>> patterns = new ArrayList<>();
-        apiRiskScores.putAll(calculateApiRiskScores(apiCalls));
         
         // 生成初始测试用例
         patterns.add(Collections.nCopies(apiCalls.size(), "normal")); // 正常情况
