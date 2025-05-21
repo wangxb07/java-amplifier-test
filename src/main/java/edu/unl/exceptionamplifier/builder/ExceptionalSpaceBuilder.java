@@ -9,7 +9,6 @@ import java.util.Map;
 import java.util.HashMap;
 import com.openai.client.OpenAIClient;
 import com.openai.client.okhttp.OpenAIOkHttpClient;
-import com.openai.models.ChatModel;
 import com.openai.models.chat.completions.ChatCompletion;
 import com.openai.models.chat.completions.ChatCompletionCreateParams;
 import io.github.cdimascio.dotenv.Dotenv; // 自动.env加载
@@ -20,7 +19,6 @@ public class ExceptionalSpaceBuilder {
     private final Set<String> exceptionSpace = new HashSet<>();
     private final Map<String, Double> exceptionWeights = new HashMap<>();
     private final Map<String, Double> apiRiskScores = new HashMap<>();
-    private double coverageThreshold = 0.8; // 默认覆盖率阈值
 
     public ExceptionalSpaceBuilder() {
         // 初始化异常权重
@@ -31,9 +29,6 @@ public class ExceptionalSpaceBuilder {
         exceptionWeights.put("InsufficientBalanceException", 0.5);
     }
 
-    public void setCoverageThreshold(double threshold) {
-        this.coverageThreshold = threshold;
-    }
 
     public void addException(String exception) {
         exceptionSpace.add(exception);
@@ -66,9 +61,7 @@ public class ExceptionalSpaceBuilder {
      * 生成基于风险的测试用例
      */
     public List<List<String>> generateRiskBasedPatterns(List<String> apiCalls, 
-                                                      List<String> exceptionTypes,
-                                                      double coverageThreshold) {
-        this.coverageThreshold = coverageThreshold;
+                                                      List<String> exceptionTypes) {
         List<List<String>> patterns = new ArrayList<>();
         apiRiskScores.putAll(calculateApiRiskScores(apiCalls));
         
@@ -121,7 +114,7 @@ public class ExceptionalSpaceBuilder {
 
     // 保持原有方法以兼容现有代码
     public List<List<String>> generateMockingPatterns(List<String> apiCalls, List<String> exceptionTypes) {
-        return generateRiskBasedPatterns(apiCalls, exceptionTypes, 0.8);
+        return generateRiskBasedPatterns(apiCalls, exceptionTypes);
     }
 
     public List<List<String>> generateMockingPatterns(List<String> apiCalls, 
@@ -130,7 +123,7 @@ public class ExceptionalSpaceBuilder {
         if (useLLM) {
             return generateMockingPatternsWithLLM(apiCalls, exceptionTypes);
         }
-        return generateRiskBasedPatterns(apiCalls, exceptionTypes, 0.8);
+        return generateRiskBasedPatterns(apiCalls, exceptionTypes);
     }
 
     private List<List<String>> generateMockingPatternsWithLLM(List<String> apiCalls, 

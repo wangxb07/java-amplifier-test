@@ -233,7 +233,7 @@ public class TestExplorer {
 
             // 执行测试逻辑
             testLogic.accept(pattern);
-            System.out.println("[TestExplorer] Test finished without uncaught exception.");
+            // System.out.println("[TestExplorer] Test finished without uncaught exception.");
         } catch (Exception e) {
             System.out.println("[TestExplorer] Caught exception: " + e);
         } catch (Throwable t) {
