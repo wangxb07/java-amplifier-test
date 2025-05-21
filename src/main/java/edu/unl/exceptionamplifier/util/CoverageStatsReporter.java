@@ -10,6 +10,23 @@ public class CoverageStatsReporter {
     private final Map<String, Set<String>> exceptionStats = new HashMap<>();
     private final Map<String, Set<String>> requiredExceptions = new HashMap<>();
     private final Map<String, Set<String>> coveredExceptions = new HashMap<>();
+    private final Map<String, List<ExceptionDetails>> detailedExceptionStats = new HashMap<>();
+
+    public static class ExceptionDetails {
+        String exceptionType;
+        String message;
+        List<String> stackTrace;
+        ExceptionDetails cause;
+        String injectedByPattern;
+
+        public ExceptionDetails(String exceptionType, String message, List<String> stackTrace, ExceptionDetails cause, String injectedByPattern) {
+            this.exceptionType = exceptionType;
+            this.message = message;
+            this.stackTrace = stackTrace;
+            this.cause = cause;
+            this.injectedByPattern = injectedByPattern;
+        }
+    }
 
     public CoverageStatsReporter() {
         // 初始化需要覆盖的异常类型
@@ -62,6 +79,11 @@ public class CoverageStatsReporter {
         }
     }
 
+    public void addSutExceptionChain(String testName, String patternString, ExceptionDetails exceptionChainDetails) {
+        String key = testName + "::" + patternString;
+        detailedExceptionStats.computeIfAbsent(key, k -> new ArrayList<>()).add(exceptionChainDetails);
+    }
+
     public void printSummaryReport() {
         // 打印常规路径覆盖率
         int totalPaths = 0;
@@ -93,6 +115,61 @@ public class CoverageStatsReporter {
         System.out.println("\n[Cobertura 覆盖率报告]");
         System.out.println("HTML 报告位置: target/site/cobertura/index.html");
         System.out.println("XML 报告位置: target/site/cobertura/coverage.xml");
+
+        // 打印SUT异常分析报告
+        printSutExceptionAnalysisReport();
+    }
+
+    private List<String> filterStackTrace(List<String> fullStackTrace, String packagePrefix) {
+        if (fullStackTrace == null) {
+            return Collections.emptyList();
+        }
+        return fullStackTrace.stream()
+                             .filter(line -> line.startsWith(packagePrefix))
+                             .collect(Collectors.toList());
+    }
+
+    public void printSutExceptionAnalysisReport() {
+        System.out.println("\n[SUT 异常详细分析报告]");
+        if (detailedExceptionStats.isEmpty()) {
+            System.out.println("没有捕获到SUT异常详细信息。");
+            return;
+        }
+
+        for (Map.Entry<String, List<ExceptionDetails>> entry : detailedExceptionStats.entrySet()) {
+            System.out.println("\nTest Pattern Key: " + entry.getKey());
+            for (ExceptionDetails details : entry.getValue()) {
+                System.out.println("  Injected Exception Pattern: " + details.injectedByPattern);
+                printExceptionChainRecursive(details, "  ");
+            }
+        }
+    }
+
+    private void printExceptionChainRecursive(ExceptionDetails details, String indent) {
+        if (details == null) {
+            return;
+        }
+        System.out.println(indent + "Exception: " + details.exceptionType);
+        System.out.println(indent + "  Message: " + details.message);
+
+        // Filter and print stack trace for "edu.unl.stock"
+        List<String> filteredStackTrace = filterStackTrace(details.stackTrace, "edu.unl.stock");
+        if (!filteredStackTrace.isEmpty()) {
+            System.out.println(indent + "  SUT Stack Trace (edu.unl.stock):");
+            for (String traceLine : filteredStackTrace) {
+                System.out.println(indent + "    " + traceLine);
+            }
+        } else if (details.stackTrace != null && !details.stackTrace.isEmpty()) {
+            // Optional: print a few lines of the full stack trace if no specific package matches
+            System.out.println(indent + "  SUT Stack Trace (Top 3 lines):");
+            details.stackTrace.stream().limit(3).forEach(line -> System.out.println(indent + "    " + line));
+        }
+
+
+        if (details.cause != null) {
+            System.out.println(indent + "  Caused by:");
+            printExceptionChainRecursive(details.cause, indent + "    ");
+        }
     }
 
     public void printDetailReport() {
