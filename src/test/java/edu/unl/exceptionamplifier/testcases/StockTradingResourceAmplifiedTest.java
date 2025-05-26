@@ -1,296 +1,304 @@
 package edu.unl.exceptionamplifier.testcases;
 
-import edu.unl.stock.StockTradingResource;
-import edu.unl.stock.RemoteApiException;
-import edu.unl.stock.MockMarketDataService;
 import edu.unl.exceptionamplifier.builder.ExceptionalSpaceBuilder;
-import edu.unl.exceptionamplifier.util.CoverageStatsReporter;
-import edu.unl.exceptionamplifier.util.CoverageStatsReporter.ExceptionDetails;
 import edu.unl.exceptionamplifier.explorer.TestExplorer;
+import edu.unl.exceptionamplifier.util.CoverageStatsReporter;
 import edu.unl.exceptionamplifier.util.ExceptionReflectionUtils;
+import edu.unl.stock.*;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 
-import org.junit.Test;
-import org.junit.AfterClass;
-import java.lang.reflect.Method;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Collections;
+import java.util.HashMap;
 import java.util.HashSet;
-import java.util.Set;
 import java.util.List;
 import java.util.Map;
-import java.util.HashMap;
+import java.util.Set;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.mockito.ArgumentMatchers.anyDouble;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyString;
-import static org.mockito.Mockito.*;
-import edu.unl.stock.StockTradingRepository;
-import edu.unl.stock.MarketDataService;
-import java.io.IOException;
-import java.sql.SQLException;
-
-import java.util.Arrays;
-
-import java.util.List;
-import java.util.Map;
-import java.util.HashMap;
-import java.util.stream.Collectors; // Added for Collectors.toList()
-
-import java.lang.reflect.Constructor;
+import static org.mockito.Mockito.doAnswer;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 
 public class StockTradingResourceAmplifiedTest {
-    // private static final CoverageStatsReporter reporter = new CoverageStatsReporter(); // Commented out as it's not used by the amplified test logic directly for adding stats.
-    private static final Set<String> requiredExceptions = new HashSet<>();
-    private static final Set<String> coveredExceptions = new HashSet<>(); // This set is updated in the explorer lambda
 
-    static {
-        // 自动收集 StockTradingResource 和 StockTradingService 的所有 public 方法声明的异常类型
-        Class<?>[] classes = {edu.unl.stock.StockTradingResource.class, edu.unl.stock.StockTradingService.class};
-        for (Class<?> clazz : classes) {
-            for (Method method : clazz.getMethods()) {
-                for (Class<?> ex : method.getExceptionTypes()) {
-                    requiredExceptions.add(ex.getSimpleName());
-                }
-            }
-        }
-        // 移除常见的 RuntimeException/Exception/Object（只保留业务相关异常）
-        requiredExceptions.remove("Exception");
-        requiredExceptions.remove("RuntimeException");
-        requiredExceptions.remove("Throwable");
-        requiredExceptions.remove("Object");
-        // 移除不相关的 InterruptedException
-        requiredExceptions.remove("InterruptedException");
-    }
+    private static final String TEST_STOCK_SYMBOL = "AAPL";
+    private static final int TEST_QUANTITY = 10;
+    private static final int K_FOR_EXHAUSTIVE = 2;
 
-    @AfterClass
-    public static void printExceptionCoverage() {
-        System.out.println("\n[需要覆盖的异常类型] " + requiredExceptions);
-        System.out.println("[已通过放大测试覆盖的异常类型] " + coveredExceptions);
-        int total = requiredExceptions.size();
-        int covered = 0;
-        for (String ex : requiredExceptions) {
-            if (coveredExceptions.contains(ex)) covered++;
-        }
-        double rate = total == 0 ? 1.0 : (covered * 1.0 / total);
-        System.out.printf("[异常覆盖率] %d/%d = %.2f%%\n", covered, total, rate * 100);
-    }
+    private static final List<String> API_CALL_SEQUENCE = Arrays.asList(
+            // Buy Operation
+            "marketDataService.getRealtimePrice",           // [0] For buy price check
+            "stockTradingRepository.getPosition",           // [1] For buy, initial position check (even if not strictly used for decision)
+            "stockTradingRepository.getBalance",            // [2] For buy, balance check
+            "stockTradingRepository.executeTradeTransaction", // [3] For buy execution
+            // Sell Operation
+            "stockTradingRepository.getPosition",           // [4] For sell, position check
+            "marketDataService.getRealtimePrice",           // [5] For sell price check
+            "stockTradingRepository.executeTradeTransaction"  // [6] For sell execution
+    );
 
-    // Individual @Test methods are removed as their functionality is covered by testAmplifiedBuyAndSell.
+    private static final List<String> ALL_EXCEPTION_TYPES = Arrays.asList(
+        "java.io.IOException",
+        "java.sql.SQLException",
+        "java.util.concurrent.TimeoutException",
+        "edu.unl.stock.InsufficientBalanceException",
+        "edu.unl.stock.PositionNotEnoughException",
+        "edu.unl.stock.RemoteApiException",
+        "java.lang.IllegalArgumentException",
+        "java.lang.NullPointerException"
+    );
 
-    @Test
-    public void testAmplifiedBuyAndSell() {
-        // 1. Define the sequence of potentially exception-throwing dependency calls
-        List<String> apiCalls = Arrays.asList(
-                "MarketDataService.getRealtimePrice", // During buy
-                "StockTradingRepository.executeTradeTransaction", // During buy
-                "MarketDataService.getRealtimePrice", // During sell
-                "StockTradingRepository.executeTradeTransaction"  // During sell
-        );
-
-        // ---- START INTEGRATION OF EXCEPTION COUNTING ----
-        Map<String, String> fqcnMap = new HashMap<>();
-        fqcnMap.put("MarketDataService", "edu.unl.stock.MarketDataService");
-        fqcnMap.put("StockTradingRepository", "edu.unl.stock.StockTradingRepository");
-        // Add other FQCNs if your sequence includes other service keys from apiCalls
-
-        int totalDeclaredExceptionsInPath = 
-            ExceptionReflectionUtils.countDeclaredExceptions(apiCalls, fqcnMap);
-
-        System.out.println("--- Test: testAmplifiedBuyAndSell ---");
-        System.out.println("API Call Sequence for amplified buy/sell (potential path): " + apiCalls);
-        System.out.println("Total potential declared exception points in this path: " + totalDeclaredExceptionsInPath);
-        // ---- END INTEGRATION OF EXCEPTION COUNTING ----
-
-        // 2. Define exception types to inject (ensure SQLException is included if repository throws it)
-        List<String> exceptionTypes = Arrays.asList(
-            "IOException", "SQLException",
-            "InsufficientBalanceException", "PositionNotEnoughException", "RemoteApiException",
-            "IllegalArgumentException" // Include validation exceptions if desired
-        );
-
-        // 3. Generate all mocking patterns
-        ExceptionalSpaceBuilder builder = new ExceptionalSpaceBuilder();
-        List<List<String>> patterns = builder.generateMockingPatterns(apiCalls, exceptionTypes, false); // includeNormal=true
-
-        // 4. Use TestExplorer to explore each pattern
-        CoverageStatsReporter coverageStats = new CoverageStatsReporter(); // Local reporter for path coverage
-        TestExplorer explorer = new TestExplorer();
-
-        System.out.println("[TestExplorer] Starting exploration of " + patterns.size() + " patterns...");
-
-        explorer.explore(apiCalls, patterns, (pattern) -> {
-            long startTime = System.currentTimeMillis();
-            Map<String, Object> stat = new HashMap<>();
-            stat.put("pattern", pattern);
-            stat.put("apiCalls", apiCalls.toString());
-            boolean isSuccess = false;
-
-            // --- Dynamic Mocking Setup ---
-            MarketDataService mockMarketData = mock(MarketDataService.class);
-            StockTradingRepository mockRepo = mock(StockTradingRepository.class);
-
-            try {
-                // Default "normal" behavior
-                when(mockMarketData.getRealtimePrice(anyString())).thenReturn(100.0); // Normal price
-                when(mockRepo.getBalance()).thenReturn(10000.0); // Sufficient balance initially
-                when(mockRepo.getPosition(anyString())).thenReturn(0); // No initial position for buy, assume 10 for sell check below
-                // Need to handle executeTradeTransaction carefully as it doesn't return a value
-                // Use lenient() for methods that might not be called in every path
-                lenient().doNothing().when(mockRepo).executeTradeTransaction(anyString(), anyInt(), anyDouble(), anyString());
-
-                // Apply exceptions based on the current pattern
-                for (int i = 0; i < pattern.size(); i++) {
-                    String exceptionName = pattern.get(i);
-                    if (!"normal".equalsIgnoreCase(exceptionName)) {
-                        String apiCall = apiCalls.get(i);
-                        Exception exceptionToThrow = createExceptionInstance(exceptionName, "Mocked " + exceptionName + " for " + apiCall);
-
-                        if (exceptionToThrow == null) {
-                             System.err.println("[WARN] Could not create instance for exception: " + exceptionName);
-                             continue; // Skip if exception couldn't be created
-                        }
-
-                        // Configure the specific mock method to throw the exception
-                        if ("MarketDataService.getRealtimePrice".equals(apiCall)) {
-                             // Match the call based on its index (1st or 3rd)
-                            if (i == 0 || i == 2) { // Corresponds to buy and sell calls
-                                // Use thenAnswer to bypass checked exception validation
-                                when(mockMarketData.getRealtimePrice(anyString())).thenAnswer(invocation -> {
-                                    throw exceptionToThrow;
-                                });
-                            }
-                        } else if ("StockTradingRepository.executeTradeTransaction".equals(apiCall)) {
-                             // Match the call based on its index (2nd or 4th)
-                             if (i == 1 || i == 3) { // Corresponds to buy and sell transactions
-                                // Use doAnswer to bypass checked exception validation for void methods
-                                doAnswer(invocation -> {
-                                    throw exceptionToThrow;
-                                }).when(mockRepo).executeTradeTransaction(anyString(), anyInt(), anyDouble(), anyString());
-                             }
-                        }
-                        // Add configurations for other mocked methods if the apiCalls list changes
-                    }
-                }
-
-                // Need to ensure mocks provide necessary state for successful sell if buy fails
-                // If buy transaction is mocked to fail, position won't increase.
-                // If sell transaction is *not* mocked, it needs a position to sell.
-                // Add logic here if necessary, e.g., conditionally set getPosition mock result.
-                 if (pattern.get(1).equalsIgnoreCase("normal")) { // If buy transaction is expected to succeed
-                     when(mockRepo.getPosition(anyString())).thenReturn(10); // Assume buy succeeded, position is 10 before sell
-                 } else {
-                     when(mockRepo.getPosition(anyString())).thenReturn(0); // Buy failed, position is 0 before sell
-                 }
-
-
-                // --- Execute Test Logic with Mocks ---
-                edu.unl.stock.StockTradingService service = new edu.unl.stock.StockTradingService(mockRepo, mockMarketData);
-                StockTradingResource resource = new StockTradingResource(service); // Use the mocked service
-
-                try {
-                    resource.buyStock("AAPL", 10);
-                    // Only proceed if buyStock didn't throw
-                    double balance = resource.getBalance(); // This might now use mocked repo
-                    resource.sellStock("AAPL", 5);
-                    int position = resource.getPosition("AAPL"); // This might now use mocked repo
-
-                    stat.put("result", "success");
-                    stat.put("balance", balance);
-                    stat.put("position", position);
-                    isSuccess = true;
-                    System.out.println("[Test] Succeeded. Pattern: " + pattern);
-
-                } catch (Exception e) { // Catch all exceptions thrown by the mocked flow
-                    stat.put("result", "exception");
-                    String exceptionSimpleName = e.getClass().getSimpleName();
-                    stat.put("exceptionType", exceptionSimpleName);
-                    stat.put("exceptionMsg", e.getMessage());
-                    ExceptionDetails capturedDetails = buildExceptionDetailsChain(e, pattern.toString());
-                    coverageStats.addSutExceptionChain("testAmplifiedBuyAndSell", pattern.toString(), capturedDetails);
-                    System.out.println("[Test] Caught Exception: " + exceptionSimpleName + ". Pattern: " + pattern + ". Msg: " + e.getMessage());
-                    coveredExceptions.add(exceptionSimpleName); // Update static set
-                    coverageStats.addExceptionStat("testAmplifiedBuyAndSell", exceptionSimpleName, true); // Update local reporter
-                    // Optionally, check if the caught exception matches the mocked one(s)
-                }
-
-            } catch (Exception setupException) {
-                 // Catch exceptions during mock setup itself
-                 stat.put("result", "error");
-                 stat.put("exceptionType", setupException.getClass().getSimpleName());
-                 stat.put("exceptionMsg", "Error during mock setup: " + setupException.getMessage());
-                 System.err.println("[Test] Error during mock setup for pattern " + pattern + ": " + setupException.getMessage());
-                 setupException.printStackTrace(); // Print stack trace for setup errors
-            } finally {
-                long endTime = System.currentTimeMillis();
-                stat.put("isSuccess", isSuccess); // isSuccess reflects if the *entire* sequence completed without *uncaught* exception
-                stat.put("timeCostMs", endTime - startTime);
-                stat.put("timestamp", endTime);
-                // Report path coverage based on whether the test completed without setup error or uncaught runtime error
-                 coverageStats.addStat("testAmplifiedBuyAndSell", pattern.toString(), stat.get("result") != "error" && isSuccess);
-                 System.out.println("[TestExplorer] Finished pattern: " + pattern + " -> " + (isSuccess ? "Success" : "Exception/Error"));
-            }
-        });
-
-        System.out.println("[TestExplorer] Exploration finished.");
-
-        // Print reports from the local path coverage reporter
-        coverageStats.printSummaryReport();
-        coverageStats.printDetailReport();
-        coverageStats.printCoverageTree();
-
-        // The @AfterClass method will print the final exception coverage based on the static sets
-    }
-
-    private static ExceptionDetails buildExceptionDetailsChain(Throwable throwable, String inputPattern) {
+    private static CoverageStatsReporter exhaustiveStatsReporter;
+    private static CoverageStatsReporter highRiskStatsReporter;
+    private static CoverageStatsReporter llmStatsReporter;
+    private static CoverageStatsReporter buyAndSellStatsReporter;
+    private static Set<String> overallCoveredExceptions = new HashSet<>();
+    private static Map<String, String> serviceClassMapForStats;
+    private static int totalPotentialExceptions;
+    private ExceptionalSpaceBuilder exceptionSpaceBuilder;
+    
+    // Helper method to build the ExceptionDetails chain for CoverageStatsReporter
+    private static CoverageStatsReporter.ExceptionDetails buildSutExceptionDetailsChain(Throwable throwable, String injectedByPattern) {
         if (throwable == null) {
             return null;
         }
-        List<String> stackTraceList = Arrays.stream(throwable.getStackTrace())
-                .map(ste -> String.format("%s.%s(%s:%d)",
-                        ste.getClassName(),
-                        ste.getMethodName(),
-                        ste.getFileName(),
-                        ste.getLineNumber()))
-                .collect(Collectors.toList());
-        ExceptionDetails causeDetails = buildExceptionDetailsChain(throwable.getCause(), inputPattern);
-        return new ExceptionDetails(
-                throwable.getClass().getName(),
-                throwable.getMessage(),
-                stackTraceList,
-                causeDetails,
-                inputPattern
+        List<String> stackTraceList = new ArrayList<>();
+        for (StackTraceElement ste : throwable.getStackTrace()) {
+            stackTraceList.add(ste.toString());
+        }
+        CoverageStatsReporter.ExceptionDetails causeDetails = buildSutExceptionDetailsChain(throwable.getCause(), injectedByPattern);
+        return new CoverageStatsReporter.ExceptionDetails(
+            throwable.getClass().getName(),
+            throwable.getMessage(),
+            stackTraceList,
+            causeDetails,
+            injectedByPattern
         );
     }
 
-    // Helper method to create exception instances from class names
-    private static Exception createExceptionInstance(String className, String message) {
-        try {
-            // Handle nested class names if necessary, assume top-level for now
-            String fullClassName;
-            if (className.equals("IOException")) {
-                fullClassName = "java.io.IOException";
-            } else if (className.equals("SQLException")) {
-                fullClassName = "java.sql.SQLException";
-            } else if (className.equals("IllegalArgumentException")) {
-                 fullClassName = "java.lang.IllegalArgumentException";
-            } else {
-                // Assume it's in the edu.unl.stock package
-                fullClassName = "edu.unl.stock." + className;
-            }
+    @BeforeEach
+    public void setUp() throws Exception {
+        serviceClassMapForStats = new HashMap<>();
+        serviceClassMapForStats.put("marketDataService", "edu.unl.stock.MarketDataService");
+        serviceClassMapForStats.put("stockTradingRepository", "edu.unl.stock.StockTradingRepository");
 
-            Class<?> clazz = Class.forName(fullClassName);
-            // Try to find a constructor that accepts a String message
-            try {
-                Constructor<?> constructor = clazz.getConstructor(String.class);
-                return (Exception) constructor.newInstance(message);
-            } catch (NoSuchMethodException e) {
-                // Try default constructor if no String constructor exists
-                Constructor<?> constructor = clazz.getConstructor();
-                return (Exception) constructor.newInstance();
-            }
-        } catch (Exception e) {
-            System.err.println("Failed to instantiate exception: " + className + " - " + e.getMessage());
-            // Optionally return a generic RuntimeException or null
-             return new RuntimeException("Failed to mock " + className + ": " + message, e);
-           // return null;
+        totalPotentialExceptions = ExceptionReflectionUtils.countDeclaredExceptions(API_CALL_SEQUENCE, serviceClassMapForStats);
+        if (totalPotentialExceptions == 0) {
+            System.err.println("Warning: totalPotentialExceptions is 0. Check API_CALL_SEQUENCE and FQCNs in serviceClassMapForStats.");
         }
+
+        exceptionSpaceBuilder = new ExceptionalSpaceBuilder();
+        buyAndSellStatsReporter = new CoverageStatsReporter();
+        exhaustiveStatsReporter = new CoverageStatsReporter();
+        highRiskStatsReporter = new CoverageStatsReporter();
+        llmStatsReporter = new CoverageStatsReporter();
+        overallCoveredExceptions.clear();
+    }
+
+    @Test
+    public void testExhaustiveAmplification() throws Exception {
+        System.out.println("\n--- Testing Exhaustive Amplification ---");
+        exhaustiveStatsReporter = new CoverageStatsReporter(); 
+
+        if (exceptionSpaceBuilder == null) {
+            System.err.println("[ERROR] exceptionSpaceBuilder is null in testExhaustiveAmplification!");
+            exceptionSpaceBuilder = new ExceptionalSpaceBuilder(); 
+        }
+
+        List<List<String>> exhaustivePatterns = exceptionSpaceBuilder.generateMockingPatterns(
+                API_CALL_SEQUENCE,
+                ALL_EXCEPTION_TYPES,
+                ExceptionalSpaceBuilder.PatternGenerationStrategy.EXHAUSTIVE, 
+                K_FOR_EXHAUSTIVE);
+
+        System.out.println("[DEBUG] Exhaustive patterns generated: " + (exhaustivePatterns == null ? "null" : exhaustivePatterns.size()));
+        if (exhaustivePatterns != null && !exhaustivePatterns.isEmpty()) {
+            System.out.println("[DEBUG] First exhaustive pattern: " + exhaustivePatterns.get(0));
+        } else if (exhaustivePatterns != null && exhaustivePatterns.isEmpty()) {
+            System.out.println("[DEBUG] Exhaustive patterns list is empty.");
+        }
+
+        List<String> allNormalPattern = Collections.nCopies(API_CALL_SEQUENCE.size(), "normal");
+        boolean foundAllNormal = false;
+        if (exhaustivePatterns != null) {
+            for (List<String> p : exhaustivePatterns) {
+                if (p.equals(allNormalPattern)) {
+                    foundAllNormal = true;
+                    break;
+                }
+            }
+        }
+        System.out.println("[DEBUG] Is 'all normal' pattern present in generated patterns? " + foundAllNormal);
+        if (foundAllNormal) {
+            System.out.println("[DEBUG] 'All normal' pattern is: " + allNormalPattern);
+        }
+
+        if (foundAllNormal && exhaustivePatterns != null && !exhaustivePatterns.isEmpty()) {
+            exhaustivePatterns.remove(allNormalPattern); // 先移除
+            exhaustivePatterns.add(0, allNormalPattern); // 再添加到开头
+            System.out.println("[DEBUG] Moved 'all normal' pattern to the beginning of the execution list.");
+            System.out.println("[DEBUG] First pattern to execute NOW: " + exhaustivePatterns.get(0));
+        }
+
+        // Ensure the reporter is fresh for this strategy
+        executeStrategyPatterns("Exhaustive", exhaustivePatterns, exhaustiveStatsReporter);
+        exhaustiveStatsReporter.printDetailReport(); 
+    }
+
+    @Test
+    public void testHighRiskOnlyAmplification() throws Exception {
+        System.out.println("\n--- Running High-Risk Only Amplification ---");
+        highRiskStatsReporter = new CoverageStatsReporter(); // Ensure reporter is fresh
+
+        exceptionSpaceBuilder.setApiRiskScore("marketDataService.getRealtimePrice", 1.0); 
+        exceptionSpaceBuilder.setApiRiskScore("stockTradingRepository.executeTradeTransaction", 1.5); 
+
+        List<List<String>> highRiskPatterns = exceptionSpaceBuilder.generateMockingPatterns(
+                API_CALL_SEQUENCE,
+                ALL_EXCEPTION_TYPES,
+                ExceptionalSpaceBuilder.PatternGenerationStrategy.HIGH_RISK_SELECTIVE,
+                0); 
+        System.out.println("Generated " + highRiskPatterns.size() + " high-risk patterns.");
+        executeStrategyPatterns("HighRisk", highRiskPatterns, highRiskStatsReporter);
+        highRiskStatsReporter.printDetailReport();
+    }
+
+    @Test
+    public void testLLMAmplification() throws Exception {
+        System.out.println("\n--- Running LLM Amplification ---");
+        llmStatsReporter = new CoverageStatsReporter(); // Ensure reporter is fresh
+
+        List<List<String>> llmPatterns = exceptionSpaceBuilder.generateMockingPatterns(
+                API_CALL_SEQUENCE,
+                ALL_EXCEPTION_TYPES,
+                ExceptionalSpaceBuilder.PatternGenerationStrategy.LLM_BASED,
+                0); 
+        System.out.println("Generated " + llmPatterns.size() + " LLM patterns.");
+        if (llmPatterns.isEmpty()) {
+            System.out.println("WARNING: LLM generated no patterns. Check API key, network, LLM service, or prompt in ExceptionalSpaceBuilder.");
+        }
+        executeStrategyPatterns("LLM", llmPatterns, llmStatsReporter);
+        llmStatsReporter.printDetailReport();
+    }
+
+    @Test
+    void testAmplifiedBuyAndSellStrategies() throws Exception {
+        System.out.println("Total potential exceptions declared in API sequence: " + totalPotentialExceptions);
+
+        List<List<String>> patterns = exceptionSpaceBuilder.generateMockingPatterns(API_CALL_SEQUENCE, ALL_EXCEPTION_TYPES);
+        executeStrategyPatterns("BuyAndSell", patterns, buyAndSellStatsReporter);
+    }
+
+    private void executeStrategyPatterns(String testName, List<List<String>> patterns, CoverageStatsReporter currentPatternReporter) throws Exception {
+        TestExplorer explorer = new TestExplorer();
+
+        explorer.explore(API_CALL_SEQUENCE, patterns, (List<String> currentPattern) -> {
+            String patternString = String.join(", ", currentPattern);
+            System.out.println(testName + " - Executing pattern: " + patternString);
+
+            MarketDataService mockMarketService = mock(MarketDataService.class);
+            StockTradingRepository mockRepository = mock(StockTradingRepository.class);
+            StockTradingService stockTradingService = new StockTradingService(mockRepository, mockMarketService);
+            StockTradingResource sut = new StockTradingResource(stockTradingService);
+
+            final AtomicInteger mdsGetPriceCallCount = new AtomicInteger(0);
+            final AtomicInteger repoGetPositionCallCount = new AtomicInteger(0);
+            final AtomicInteger repoGetBalanceCallCount = new AtomicInteger(0);
+            final AtomicInteger repoExecTradeCallCount = new AtomicInteger(0);
+            
+            when(mockMarketService.getRealtimePrice(anyString())).thenAnswer(inv -> {
+                int callNum = mdsGetPriceCallCount.incrementAndGet();
+                if (callNum == 1) { 
+                    if (!"normal".equals(currentPattern.get(0))) {
+                        System.out.println("  [Mock] MDS.getRealtimePrice (buy) throwing " + currentPattern.get(0));
+                        throw ExceptionReflectionUtils.createExceptionInstance(currentPattern.get(0), "Mocked for MDS.getRealtimePrice (buy)");
+                    }
+                    return 100.0; 
+                } else if (callNum == 2) { 
+                    if (!"normal".equals(currentPattern.get(5))) {
+                        System.out.println("  [Mock] MDS.getRealtimePrice (sell) throwing " + currentPattern.get(5));
+                        throw ExceptionReflectionUtils.createExceptionInstance(currentPattern.get(5), "Mocked for MDS.getRealtimePrice (sell)");
+                    }
+                    return 110.0; 
+                }
+                System.out.println("  [Mock] MDS.getRealtimePrice unexpected call " + callNum + ", returning default 100.0");
+                return 100.0;
+            });
+
+            when(mockRepository.getPosition(anyString())).thenAnswer(inv -> {
+                int callNum = repoGetPositionCallCount.incrementAndGet();
+                if (callNum == 1) { 
+                    if (!"normal".equals(currentPattern.get(1))) {
+                        System.out.println("  [Mock] Repo.getPosition (buy) throwing " + currentPattern.get(1));
+                        throw ExceptionReflectionUtils.createExceptionInstance(currentPattern.get(1), "Mocked for Repo.getPosition (buy)");
+                    }
+                    return 0; 
+                } else if (callNum == 2) { 
+                    if (!"normal".equals(currentPattern.get(4))) {
+                        System.out.println("  [Mock] Repo.getPosition (sell) throwing " + currentPattern.get(4));
+                        throw ExceptionReflectionUtils.createExceptionInstance(currentPattern.get(4), "Mocked for Repo.getPosition (sell)");
+                    }
+                    return TEST_QUANTITY + 10; 
+                }
+                System.out.println("  [Mock] Repo.getPosition unexpected call " + callNum + ", returning 0");
+                return 0;
+            });
+
+            when(mockRepository.getBalance()).thenAnswer(inv -> {
+                repoGetBalanceCallCount.incrementAndGet(); 
+                if (!"normal".equals(currentPattern.get(2))) {
+                    System.out.println("  [Mock] Repo.getBalance throwing " + currentPattern.get(2));
+                    throw ExceptionReflectionUtils.createExceptionInstance(currentPattern.get(2), "Mocked for Repo.getBalance");
+                }
+                return 100000.0; 
+            });
+
+            doAnswer(inv -> {
+                int callNum = repoExecTradeCallCount.incrementAndGet();
+                if (callNum == 1) { 
+                    if (!"normal".equals(currentPattern.get(3))) {
+                        System.out.println("  [Mock] Repo.executeTradeTransaction (buy) throwing " + currentPattern.get(3));
+                        throw ExceptionReflectionUtils.createExceptionInstance(currentPattern.get(3), "Mocked for Repo.executeTradeTransaction (buy)");
+                    }
+                } else if (callNum == 2) { 
+                    if (!"normal".equals(currentPattern.get(6))) {
+                        System.out.println("  [Mock] Repo.executeTradeTransaction (sell) throwing " + currentPattern.get(6));
+                        throw ExceptionReflectionUtils.createExceptionInstance(currentPattern.get(6), "Mocked for Repo.executeTradeTransaction (sell)");
+                    }
+                }
+                if (callNum > 2) {
+                     System.out.println("  [Mock] Repo.executeTradeTransaction unexpected call " + callNum);
+                }
+                return null;
+            }).when(mockRepository).executeTradeTransaction(anyString(), anyInt(), anyDouble(), anyString());
+
+            try {
+                System.out.println("  [SUT] Attempting to buy " + TEST_QUANTITY + " of " + TEST_STOCK_SYMBOL);
+                sut.buyStock(TEST_STOCK_SYMBOL, TEST_QUANTITY);
+                currentPatternReporter.addStat(testName, patternString + " -> buyStock OK", true); 
+                System.out.println("  [SUT] Buy stock successful.");
+
+                System.out.println("  [SUT] Attempting to sell " + TEST_QUANTITY + " of " + TEST_STOCK_SYMBOL);
+                sut.sellStock(TEST_STOCK_SYMBOL, TEST_QUANTITY);
+                currentPatternReporter.addStat(testName, patternString + " -> sellStock OK", true); 
+                System.out.println("  [SUT] Sell stock successful.");
+
+                currentPatternReporter.addStat(testName, patternString + " -> Full sequence OK", true); 
+
+            } catch (Exception e) { 
+                String exceptionType = e.getClass().getName();
+                System.out.println("  [SUT Exception] Caught: " + exceptionType + " for pattern: " + patternString + " Message: " + e.getMessage());
+                currentPatternReporter.addExceptionStat(testName, exceptionType);
+                overallCoveredExceptions.add(exceptionType);
+                CoverageStatsReporter.ExceptionDetails details = buildSutExceptionDetailsChain(e, patternString); 
+                currentPatternReporter.addSutExceptionChain(testName, patternString, details);
+            }
+        });
     }
 }

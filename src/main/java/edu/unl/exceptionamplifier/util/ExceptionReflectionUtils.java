@@ -3,6 +3,8 @@ package edu.unl.exceptionamplifier.util; // THIS MUST BE THE FIRST LINE
 import java.lang.reflect.Method;
 import java.util.List;
 import java.util.Map;
+import java.lang.reflect.Constructor;
+import java.lang.reflect.InvocationTargetException;
 
 public class ExceptionReflectionUtils {
     // ... (rest of the code as provided previously)
@@ -62,5 +64,41 @@ public class ExceptionReflectionUtils {
             }
         }
         return totalPotentialExceptions;
+    }
+
+    public static Throwable createExceptionInstance(String className, String message) {
+        try {
+            Class<?> clazz = Class.forName(className);
+            Constructor<?> constructor = null;
+            Throwable instance = null;
+
+            // Try to find a constructor that takes a String (message)
+            try {
+                constructor = clazz.getConstructor(String.class);
+                instance = (Throwable) constructor.newInstance(message);
+            } catch (NoSuchMethodException e) {
+                // If no String constructor, try a no-arg constructor
+                try {
+                    constructor = clazz.getConstructor();
+                    instance = (Throwable) constructor.newInstance();
+                    // Attempt to set message if possible (e.g. via initCause or if it's a RuntimeException)
+                    // This part is a bit speculative as there's no standard setCauseWithMessage method.
+                    // For simplicity, we'll rely on the constructor or let it be without a message if no String constructor.
+                } catch (NoSuchMethodException ex) {
+                    System.err.println("No suitable constructor found for " + className + " (tried String and no-arg). Returning generic RuntimeException.");
+                    return new RuntimeException("Could not instantiate " + className + ": " + message + " (no suitable constructor)");
+                }
+            }
+            return instance;
+        } catch (ClassNotFoundException e) {
+            System.err.println("Exception class not found: " + className + ". Returning generic RuntimeException.");
+            return new RuntimeException("Original exception class not found: " + className + ", message: " + message, e);
+        } catch (InstantiationException | IllegalAccessException | InvocationTargetException e) {
+            System.err.println("Error instantiating exception " + className + ": " + e.getMessage() + ". Returning generic RuntimeException.");
+            return new RuntimeException("Error instantiating " + className + ": " + message, e);
+        } catch (SecurityException e) {
+            System.err.println("Security exception while creating instance of " + className + ": " + e.getMessage() + ". Returning generic RuntimeException.");
+            return new RuntimeException("Security issue creating " + className + ": " + message, e);
+        }
     }
 }

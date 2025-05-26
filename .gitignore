@@ -54,3 +54,6 @@ Thumbs.db
 # AspectJ
 *.ajc
 .DS_Store
+
+
+coverage_reports/

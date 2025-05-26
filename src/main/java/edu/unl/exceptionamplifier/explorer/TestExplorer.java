@@ -2,7 +2,6 @@ package edu.unl.exceptionamplifier.explorer;
 
 import edu.unl.exceptionamplifier.mocker.ResourceMocker;
 import java.util.*;
-import java.util.function.Consumer;
 
 public class TestExplorer {
     private final ResourceMocker mocker = new ResourceMocker();
@@ -215,7 +214,7 @@ public class TestExplorer {
     /**
      * 执行测试用例
      */
-    private void executeTest(List<String> pattern, Consumer<List<String>> testLogic) {
+    private void executeTest(List<String> pattern, ThrowingConsumer<List<String>> testLogic) {
         // 检查执行次数限制
         if (executionCount.values().stream().mapToInt(Integer::intValue).sum() >= maxExecutions) {
             return;
@@ -234,8 +233,9 @@ public class TestExplorer {
             // 执行测试逻辑
             testLogic.accept(pattern);
             // System.out.println("[TestExplorer] Test finished without uncaught exception.");
-        } catch (Exception e) {
-            System.out.println("[TestExplorer] Caught exception: " + e);
+        } catch (Exception e) { // Catching Exception from testLogic.accept()
+            System.out.println("[TestExplorer] Caught exception during testLogic execution: " + e.getMessage());
+            // Optionally re-throw or handle more specifically
         } catch (Throwable t) {
             System.out.println("[TestExplorer] Error: " + t);
         }
@@ -246,7 +246,7 @@ public class TestExplorer {
      */
     public void exploreWithDependencies(List<String> resources, 
                                       List<List<String>> patterns,
-                                      Consumer<List<String>> testLogic) {
+                                      ThrowingConsumer<List<String>> testLogic) {
         // 分析异常依赖关系
         analyzeExceptionDependencies(resources);
 
@@ -269,14 +269,15 @@ public class TestExplorer {
                 patterns.add(pattern);
             }
         }
-        exploreWithDependencies(resources, patterns, (pattern) -> {
-            // 默认测试逻辑
+        exploreWithDependencies(resources, patterns, (currentPattern) -> {
+            // 默认测试逻辑: Do nothing or log, as it now can throw Exception
+            System.out.println("[TestExplorer] Default test logic executed for pattern: " + currentPattern);
         });
     }
 
     public void explore(List<String> resources, 
                        List<List<String>> patterns, 
-                       Consumer<List<String>> testLogic) {
+                       ThrowingConsumer<List<String>> testLogic) {
         exploreWithDependencies(resources, patterns, testLogic);
     }
 }

@@ -26,23 +26,62 @@ public class CoverageStatsReporter {
         }
     }
 
+    /**
+     * Register an exception type under a specific category
+     * @param category The category name (e.g., "Business", "System", "Validation")
+     * @param exceptionType The fully qualified exception class name
+     */
+    public void registerExceptionType(String category, String exceptionType) {
+        requiredExceptions.computeIfAbsent(category, k -> new HashSet<>()).add(exceptionType);
+        coveredExceptions.computeIfAbsent(category, k -> new HashSet<>());
+    }
+
+    /**
+     * Register multiple exception types under a specific category
+     * @param category The category name
+     * @param exceptionTypes Collection of exception class names
+     */
+    public void registerExceptionTypes(String category, Collection<String> exceptionTypes) {
+        for (String exceptionType : exceptionTypes) {
+            registerExceptionType(category, exceptionType);
+        }
+    }
+
     public CoverageStatsReporter() {
+        // Initialize with empty categories
+        // Categories and exception types should be registered by the test
     }
 
     public void addStat(String testName, String pattern, boolean covered) {
         normalPathStats.computeIfAbsent(testName, k -> new ArrayList<>()).add(pattern);
     }
 
+    /**
+     * Add an exception stat to the coverage report
+     * @param testName The name of the test that caught the exception
+     * @param exceptionType The fully qualified name of the exception class
+     */
     public void addExceptionStat(String testName, String exceptionType) {
+        if (testName == null || exceptionType == null) {
+            return;
+        }
+        
+        // Add to test-specific exception stats
         exceptionStats.computeIfAbsent(testName, k -> new HashSet<>()).add(exceptionType);
         
-        // 根据异常类型分类记录
-        if (requiredExceptions.get("Business").contains(exceptionType)) {
-            coveredExceptions.get("Business").add(exceptionType);
-        } else if (requiredExceptions.get("System").contains(exceptionType)) {
-            coveredExceptions.get("System").add(exceptionType);
-        } else if (requiredExceptions.get("Validation").contains(exceptionType)) {
-            coveredExceptions.get("Validation").add(exceptionType);
+        // Find which category this exception belongs to (if any)
+        boolean categorized = false;
+        for (Map.Entry<String, Set<String>> entry : requiredExceptions.entrySet()) {
+            if (entry.getValue().contains(exceptionType)) {
+                coveredExceptions.get(entry.getKey()).add(exceptionType);
+                categorized = true;
+            }
+        }
+        
+        // If not categorized, add to "Uncategorized"
+        if (!categorized) {
+            registerExceptionType("Uncategorized", exceptionType);
+            coveredExceptions.get("Uncategorized").add(exceptionType);
         }
     }
 
@@ -66,8 +105,8 @@ public class CoverageStatsReporter {
         if (coveredExceptions.isEmpty()) {
             System.out.println("未捕获任何异常。");
         } else {
-            for (Map.Entry<String, Integer> entry : coveredExceptions.entrySet()) {
-                System.out.printf("%s: %d 次\n", entry.getKey(), entry.getValue());
+            for (Map.Entry<String, Set<String>> entry : coveredExceptions.entrySet()) {
+                System.out.printf("%s: %d 次\n", entry.getKey(), entry.getValue().size());
             }
         }
 
@@ -185,9 +224,9 @@ public class CoverageStatsReporter {
             System.out.println("  未捕获任何异常。");
         } else {
             System.out.println("  ROOT_EXCEPTIONS");
-            for (Map.Entry<String, Integer> entry : coveredExceptions.entrySet()) {
+            for (Map.Entry<String, Set<String>> entry : coveredExceptions.entrySet()) {
                 System.out.printf("    %s (总计: %d 次)\n",
-                    entry.getKey(), entry.getValue());
+                    entry.getKey(), entry.getValue().size());
             }
         }
     }

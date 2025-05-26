@@ -1,6 +1,6 @@
 package edu.unl.exceptionamplifier.testcases;
 
-import org.junit.Test;
+import org.junit.jupiter.api.Test;
 
 public class ResourceClientTest {
     @Test

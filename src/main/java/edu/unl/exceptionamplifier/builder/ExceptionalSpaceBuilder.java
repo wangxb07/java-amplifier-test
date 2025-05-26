@@ -16,8 +16,16 @@ import io.github.cdimascio.dotenv.Dotenv; // 自动.env加载
 import com.alibaba.fastjson.JSONArray;
 
 public class ExceptionalSpaceBuilder {
+    // Define an enum for generation strategies
+    public static enum PatternGenerationStrategy {
+        EXHAUSTIVE, // 穷尽式
+        HIGH_RISK_SELECTIVE, // 由HighRisk参与的选择性生成
+        LLM_BASED, // LLM参与的所有可能的模拟模式组合
+        DEFAULT_RISK_BASED // 默认的基于风险的生成（结合了单一异常和高风险API对）
+    }
+
     private final Set<String> exceptionSpace = new HashSet<>();
-    private final Map<String, Double> apiRiskScores = new HashMap<>();
+    private final Map<String, Double> apiRiskScores = new HashMap<>(); // Example: apiRiskScores.put("api1", 1.5);
 
     public ExceptionalSpaceBuilder() {
     }
@@ -30,81 +38,206 @@ public class ExceptionalSpaceBuilder {
         return new HashSet<>(exceptionSpace);
     }
 
+    // Method to set API risk scores, useful for HIGH_RISK_SELECTIVE
+    public void setApiRiskScore(String apiCall, double score) {
+        this.apiRiskScores.put(apiCall, score);
+    }
+
     /**
-     * 生成基于风险的测试用例
+     * 生成基于风险的测试用例 (can be used for DEFAULT_RISK_BASED and as a basis for HIGH_RISK_SELECTIVE)
      */
-    public List<List<String>> generateRiskBasedPatterns(List<String> apiCalls, 
+    public List<List<String>> generateRiskBasedPatterns(List<String> apiCalls,
                                                       List<String> exceptionTypes) {
         List<List<String>> patterns = new ArrayList<>();
-        
-        // 生成初始测试用例
-        patterns.add(Collections.nCopies(apiCalls.size(), "normal")); // 正常情况
-        
-        // 为每个API生成单个异常的情况
-        for (String apiCall : apiCalls) {
+        if (apiCalls == null || apiCalls.isEmpty()) {
+            return patterns;
+        }
+//        List<String> allPossibleStates = new ArrayList<>(exceptionTypes);
+//        allPossibleStates.add("normal");
+
+        // 1. Normal case (all calls are normal)
+        patterns.add(Collections.nCopies(apiCalls.size(), "normal"));
+
+        // 2. Single exception patterns (one API call fails, others are normal)
+        for (int i = 0; i < apiCalls.size(); i++) {
             for (String exception : exceptionTypes) {
                 List<String> pattern = new ArrayList<>(Collections.nCopies(apiCalls.size(), "normal"));
-                pattern.set(apiCalls.indexOf(apiCall), exception);
+                pattern.set(i, exception);
                 patterns.add(pattern);
             }
         }
-        
-        // 生成高风险组合
+
+        // 3. High-risk combinations (based on apiRiskScores)
+        // This part can be enhanced for a more sophisticated HIGH_RISK_SELECTIVE mode
         generateHighRiskPatterns(apiCalls, exceptionTypes, patterns);
-        
+
         return patterns;
     }
 
     /**
      * 生成高风险组合的测试用例
+     * This is a helper for generateRiskBasedPatterns and can be expanded for HIGH_RISK_SELECTIVE
      */
-    private void generateHighRiskPatterns(List<String> apiCalls, 
+    private void generateHighRiskPatterns(List<String> apiCalls,
                                         List<String> exceptionTypes,
                                         List<List<String>> patterns) {
         // 识别高风险API组合
         List<String> highRiskApis = new ArrayList<>();
+        // Example threshold, can be configurable
+        double riskThreshold = 1.2;
         for (Map.Entry<String, Double> entry : apiRiskScores.entrySet()) {
-            if (entry.getValue() > 1.2) { // 风险分数阈值
+            if (entry.getValue() > riskThreshold && apiCalls.contains(entry.getKey())) {
                 highRiskApis.add(entry.getKey());
             }
         }
-        
-        // 为高风险API生成异常组合
-        for (int i = 0; i < highRiskApis.size(); i++) {
-            for (int j = i + 1; j < highRiskApis.size(); j++) {
-                for (String ex1 : exceptionTypes) {
-                    for (String ex2 : exceptionTypes) {
-                        List<String> pattern = new ArrayList<>(Collections.nCopies(apiCalls.size(), "normal"));
-                        pattern.set(apiCalls.indexOf(highRiskApis.get(i)), ex1);
-                        pattern.set(apiCalls.indexOf(highRiskApis.get(j)), ex2);
-                        patterns.add(pattern);
+
+        // 为高风险API生成异常组合 (currently pairs of high-risk APIs)
+        // This logic can be made more sophisticated for HIGH_RISK_SELECTIVE
+        if (highRiskApis.size() >= 2) {
+            for (int i = 0; i < highRiskApis.size(); i++) {
+                for (int j = i + 1; j < highRiskApis.size(); j++) {
+                    String highRiskApi1 = highRiskApis.get(i);
+                    String highRiskApi2 = highRiskApis.get(j);
+                    int index1 = apiCalls.indexOf(highRiskApi1);
+                    int index2 = apiCalls.indexOf(highRiskApi2);
+
+                    if (index1 == -1 || index2 == -1) continue; // Should not happen if highRiskApis are derived from apiCalls
+
+                    for (String ex1 : exceptionTypes) {
+                        for (String ex2 : exceptionTypes) {
+                            List<String> pattern = new ArrayList<>(Collections.nCopies(apiCalls.size(), "normal"));
+                            pattern.set(index1, ex1);
+                            pattern.set(index2, ex2);
+                            patterns.add(pattern);
+                        }
                     }
                 }
             }
         }
+        // Consider adding patterns for single high-risk APIs having an exception if not covered
+        // or if HIGH_RISK_SELECTIVE requires more focused single high-risk API patterns.
     }
 
-    // 保持原有方法以兼容现有代码
+    /**
+     * 新增：生成穷尽式模式
+     * Generates exhaustive patterns for the first k API calls.
+     * For N calls and M exception types (+ "normal"), generates (M+1)^k patterns for the first k calls.
+     * Remaining N-k calls are set to "normal".
+     *
+     * @param apiCalls List of API call identifiers.
+     * @param exceptionTypes List of possible exception types.
+     * @param k The number of initial API calls to generate exhaustive patterns for. If k > N, it uses N.
+     * @return A list of generated mock patterns.
+     */
+    public List<List<String>> generateExhaustivePatterns(List<String> apiCalls, List<String> exceptionTypes, int k) {
+        List<List<String>> patterns = new ArrayList<>();
+        if (apiCalls == null || apiCalls.isEmpty()) {
+            return patterns;
+        }
+
+        int n = apiCalls.size();
+        int numCallsToVary = Math.min(k, n);
+
+        List<String> possibleStates = new ArrayList<>(exceptionTypes);
+        possibleStates.add("normal"); // Add "normal" state
+
+        int numStates = possibleStates.size();
+        long totalPatternsToGenerate = (long) Math.pow(numStates, numCallsToVary);
+
+        // To prevent generating an excessive number of patterns that might lead to memory issues.
+        // This limit can be adjusted.
+        if (totalPatternsToGenerate > 100000) { // Example limit
+            System.err.println("Warning: Exhaustive pattern generation for k=" + numCallsToVary +
+                               " would create " + totalPatternsToGenerate +
+                               " patterns, which exceeds the limit. Returning empty list.");
+            // Or, alternatively, could throw an exception or return a subset.
+            return patterns;
+        }
+
+        // Helper for recursive generation
+        generateExhaustiveRecursive(apiCalls, possibleStates, numCallsToVary, n, 0, new ArrayList<>(Collections.nCopies(n, "normal")), patterns);
+
+        return patterns;
+    }
+
+    private void generateExhaustiveRecursive(List<String> apiCalls, List<String> possibleStates,
+                                             int k, int n, int currentIndex,
+                                             List<String> currentPattern, List<List<String>> allPatterns) {
+        if (currentIndex == k) {
+            // First k calls have been set, the rest are 'normal' (already initialized)
+            allPatterns.add(new ArrayList<>(currentPattern));
+            return;
+        }
+
+        for (String state : possibleStates) {
+            currentPattern.set(currentIndex, state);
+            generateExhaustiveRecursive(apiCalls, possibleStates, k, n, currentIndex + 1, currentPattern, allPatterns);
+        }
+    }
+
+
+    // Refactored main generation method
+    public List<List<String>> generateMockingPatterns(List<String> apiCalls,
+                                                    List<String> exceptionTypes,
+                                                    PatternGenerationStrategy strategy,
+                                                    int kForExhaustive) { // kForExhaustive is only used for EXHAUSTIVE strategy
+        switch (strategy) {
+            case EXHAUSTIVE:
+                if (kForExhaustive <= 0) {
+                    // Default to varying all calls if k is not specified or invalid for exhaustive
+                    return generateExhaustivePatterns(apiCalls, exceptionTypes, apiCalls.size());
+                }
+                return generateExhaustivePatterns(apiCalls, exceptionTypes, kForExhaustive);
+            case HIGH_RISK_SELECTIVE:
+                // For HIGH_RISK_SELECTIVE, we might want a more tailored approach.
+                // For now, it can use generateRiskBasedPatterns, which includes high-risk pairs.
+                // This can be expanded based on more specific requirements for "HighRisk参与的选择性生成".
+                // For example, you might want to prompt the user for which specific high-risk APIs to focus on,
+                // or implement a more advanced selection logic.
+                System.out.println("Note: HIGH_RISK_SELECTIVE currently uses the default risk-based pattern generation. " +
+                                   "Further refinement might be needed for specific selective logic.");
+                return generateRiskBasedPatterns(apiCalls, exceptionTypes);
+            case LLM_BASED:
+                return generateMockingPatternsWithLLM(apiCalls, exceptionTypes);
+            case DEFAULT_RISK_BASED:
+            default:
+                return generateRiskBasedPatterns(apiCalls, exceptionTypes);
+        }
+    }
+
+    // Overloaded method for convenience, defaulting to DEFAULT_RISK_BASED
     public List<List<String>> generateMockingPatterns(List<String> apiCalls, List<String> exceptionTypes) {
-        return generateRiskBasedPatterns(apiCalls, exceptionTypes);
+        return generateMockingPatterns(apiCalls, exceptionTypes, PatternGenerationStrategy.DEFAULT_RISK_BASED, apiCalls.size());
     }
 
-    public List<List<String>> generateMockingPatterns(List<String> apiCalls, 
-                                                    List<String> exceptionTypes, 
+    // Overloaded method to maintain compatibility with existing boolean useLLM flag
+    public List<List<String>> generateMockingPatterns(List<String> apiCalls,
+                                                    List<String> exceptionTypes,
                                                     boolean useLLM) {
         if (useLLM) {
-            return generateMockingPatternsWithLLM(apiCalls, exceptionTypes);
+            return generateMockingPatterns(apiCalls, exceptionTypes, PatternGenerationStrategy.LLM_BASED, apiCalls.size());
         }
-        return generateRiskBasedPatterns(apiCalls, exceptionTypes);
+        return generateMockingPatterns(apiCalls, exceptionTypes, PatternGenerationStrategy.DEFAULT_RISK_BASED, apiCalls.size());
     }
 
-    private List<List<String>> generateMockingPatternsWithLLM(List<String> apiCalls, 
+    private List<List<String>> generateMockingPatternsWithLLM(List<String> apiCalls,
                                                             List<String> exceptionTypes) {
-        // 使用LLM生成测试用例的逻辑保持不变
-        String prompt = "已知API调用序列：" + apiCalls +
-                "\n支持的异常类型：" + exceptionTypes +
-                "\n请为每个API调用点生成所有可能的Mocking Pattern组合，每个组合是一个长度为" + apiCalls.size() +
-                "的列表，元素为normal或异常类型，返回JSON格式的Java List<List<String>>，不要有多余解释。";
+        // Construct a more detailed prompt for the LLM
+        String apiCallString = String.join(", ", apiCalls);
+        String exceptionTypeString = String.join(", ", exceptionTypes);
+
+        // Enhanced prompt for LLM
+        String prompt = String.format(
+            "Consider a sequence of %d API calls: [%s]. " +
+            "The possible states for each API call are 'normal' or one of the following exception types: [%s]. " +
+            "Generate a diverse and comprehensive set of mock patterns representing different scenarios of these API calls failing or succeeding. " +
+            "Each pattern should be a list of states, one for each API call in the sequence. " +
+            "Prioritize scenarios that are non-trivial, including multiple failures, and sequences of failures. " +
+            "Return the result as a JSON formatted Java List<List<String>>. For example: [[\"normal\", \"ExceptionA\"], [\"ExceptionB\", \"normal\"]]. " +
+            "Do not include any explanations, comments, or natural language outside of the JSON array itself.",
+            apiCalls.size(), apiCallString, exceptionTypeString
+        );
+
         String llmResponse = callLLM(prompt);
         return parseMockPatterns(llmResponse);
     }
