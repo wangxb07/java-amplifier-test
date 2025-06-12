@@ -72,11 +72,25 @@ public class OrderManagementResourceAmplifiedTest {
     @Test
     public void testExhaustiveAmplification() throws Exception {
         exceptionSpaceBuilder = new ExceptionalSpaceBuilder();
-        List<List<String>> patterns = exceptionSpaceBuilder.generateExhaustivePatterns(
-            API_CALL_SEQUENCE, ALL_EXCEPTION_TYPES, K_FOR_EXHAUSTIVE);
+        List<List<String>> patterns = exceptionSpaceBuilder.generateMockingPatterns(
+                API_CALL_SEQUENCE,
+                ALL_EXCEPTION_TYPES,
+                ExceptionalSpaceBuilder.PatternGenerationStrategy.EXHAUSTIVE,
+                K_FOR_EXHAUSTIVE);
         exhaustiveStatsReporter = new CoverageStatsReporter();
         executeStrategyPatterns("Exhaustive", patterns, exhaustiveStatsReporter);
         exhaustiveStatsReporter.printSummaryReport();
+    }
+
+    @Test
+    public void testLlmAmplification() throws Exception {
+        exceptionSpaceBuilder = new ExceptionalSpaceBuilder();
+        List<List<String>> patterns = exceptionSpaceBuilder.generateMockingPatterns(
+            API_CALL_SEQUENCE, ALL_EXCEPTION_TYPES, 
+                ExceptionalSpaceBuilder.PatternGenerationStrategy.LLM_BASED, 0);
+        CoverageStatsReporter llmStatsReporter = new CoverageStatsReporter();
+        executeStrategyPatterns("LLM", patterns, llmStatsReporter);
+        llmStatsReporter.printSummaryReport();
     }
 
     private void executeStrategyPatterns(String testName, List<List<String>> patterns, CoverageStatsReporter currentPatternReporter) {
