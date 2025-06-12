@@ -35,6 +35,11 @@ public class WalletResource {
         service.crossChainSwap(fromChain, toChain, amount);
     }
 
+    public void exchangeToken(String fromChain, String toChain, double amount, double fee, String network)
+            throws SQLException, InsufficientBalanceException, RemoteApiException {
+        service.exchangeToken(fromChain, toChain, amount, fee, network);
+    }
+
     public double getBalance(String chain) throws SQLException {
         return service.getBalance(chain);
     }
