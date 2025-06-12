@@ -7,6 +7,7 @@ import edu.unl.exceptionamplifier.util.ExceptionReflectionUtils;
 import edu.unl.order.*;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import static org.junit.jupiter.api.Assertions.assertEquals;
 
 import java.util.*;
 
@@ -103,12 +104,16 @@ public class OrderManagementResourceAmplifiedTest {
             OrderManagementResource resource = new OrderManagementResource(service);
 
             // Call counters for sequence
-            final int[] callCount = {0};
+            final int[] inventoryCallCount = {0};
+            final int[] balanceCallCount = {0};
+            final int[] placeOrderCallCount = {0};
+            final int[] cancelOrderCallCount = {0};
+            final int[] priceCallCount = {0};
 
             try {
                 // Mock getInventory
                 when(mockRepository.getInventory(anyString())).thenAnswer(inv -> {
-                    callCount[0]++;
+                    inventoryCallCount[0]++;
                     if (!"normal".equals(currentPattern.get(0))) {
                         throw ExceptionReflectionUtils.createExceptionInstance(currentPattern.get(0), "Mocked for getInventory");
                     }
@@ -117,6 +122,7 @@ public class OrderManagementResourceAmplifiedTest {
 
                 // Mock getBalance
                 when(mockRepository.getBalance()).thenAnswer(inv -> {
+                    balanceCallCount[0]++;
                     if (!"normal".equals(currentPattern.get(1))) {
                         throw ExceptionReflectionUtils.createExceptionInstance(currentPattern.get(1), "Mocked for getBalance");
                     }
@@ -125,6 +131,7 @@ public class OrderManagementResourceAmplifiedTest {
 
                 // Mock placeOrder (simulate order placement, return orderId)
                 doAnswer(inv -> {
+                    placeOrderCallCount[0]++;
                     if (!"normal".equals(currentPattern.get(2))) {
                         throw ExceptionReflectionUtils.createExceptionInstance(currentPattern.get(2), "Mocked for placeOrder");
                     }
@@ -134,11 +141,18 @@ public class OrderManagementResourceAmplifiedTest {
 
                 // Mock cancelOrder (simulate order cancellation)
                 doAnswer(inv -> {
+                    cancelOrderCallCount[0]++;
                     if (!"normal".equals(currentPattern.get(4))) {
                         throw ExceptionReflectionUtils.createExceptionInstance(currentPattern.get(4), "Mocked for cancelOrder");
                     }
                     return null;
                 }).when(mockRepository).cancelOrder(anyInt());
+
+                // Mock price service
+                when(mockPriceService.getPrice(anyString())).thenAnswer(inv -> {
+                    priceCallCount[0]++;
+                    return 50.0;
+                });
 
                 // Place and cancel order sequence
                 System.out.println("  [SUT] Attempting to place order");
@@ -160,6 +174,16 @@ public class OrderManagementResourceAmplifiedTest {
                 overallCoveredExceptions.add(exceptionType);
                 CoverageStatsReporter.ExceptionDetails details = buildSutExceptionDetailsChain(e, patternString);
                 currentPatternReporter.addSutExceptionChain(testName, patternString, details);
+            } finally {
+                int expectedInventoryCalls = 1;
+                int expectedBalanceCalls = "normal".equals(currentPattern.get(0)) ? 1 : 0;
+                int expectedPlaceOrderCalls = (expectedBalanceCalls == 1 && "normal".equals(currentPattern.get(1))) ? 1 : 0;
+                int expectedCancelOrderCalls = (expectedPlaceOrderCalls == 1 && "normal".equals(currentPattern.get(2))) ? 1 : 0;
+                assertEquals(expectedInventoryCalls, inventoryCallCount[0], "inventory calls");
+                assertEquals(expectedBalanceCalls, balanceCallCount[0], "balance calls");
+                assertEquals(expectedPlaceOrderCalls, placeOrderCallCount[0], "placeOrder calls");
+                assertEquals(expectedCancelOrderCalls, cancelOrderCallCount[0], "cancelOrder calls");
+                assertEquals(1, priceCallCount[0], "price calls");
             }
         });
     }
