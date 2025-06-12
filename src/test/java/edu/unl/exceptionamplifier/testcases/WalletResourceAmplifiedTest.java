@@ -18,13 +18,16 @@ public class WalletResourceAmplifiedTest {
     private static final String TEST_TOKEN = "ETH";
     private static final String TEST_TARGET = "0xabc";
     private static final double TEST_AMOUNT = 10.0;
+    private static final double TEST_FEE = 1.0;
+    private static final String TEST_NETWORK = "mainnet";
     private static final int K_FOR_EXHAUSTIVE = 2;
 
     // 假设钱包操作的调用链为：getBalance -> updateBalance -> executeTransfer
     private static final List<String> API_CALL_SEQUENCE = Arrays.asList(
             "walletRepository.getBalance",           // [0] 查询余额
             "walletRepository.updateBalance",        // [1] 更新余额
-            "walletRepository.executeTransfer"       // [2] 执行转账
+            "walletRepository.executeTransfer",      // [2] 执行转账
+            "walletRepository.exchangeToken"         // [3] 兑换虚拟币
     );
 
     private static final List<String> ALL_EXCEPTION_TYPES = Arrays.asList(
@@ -32,6 +35,7 @@ public class WalletResourceAmplifiedTest {
         "java.sql.SQLException",
         "java.util.concurrent.TimeoutException",
         "edu.unl.wallet.InsufficientBalanceException",
+        "edu.unl.wallet.RemoteApiException",
         "java.lang.IllegalArgumentException",
         "java.lang.NullPointerException"
     );
@@ -98,6 +102,7 @@ public class WalletResourceAmplifiedTest {
         highRiskStatsReporter = new CoverageStatsReporter();
         exceptionSpaceBuilder.setApiRiskScore("walletRepository.updateBalance", 1.5);
         exceptionSpaceBuilder.setApiRiskScore("walletRepository.crossChainSwap", 1.5);
+        exceptionSpaceBuilder.setApiRiskScore("walletRepository.exchangeToken", 1.5);
         List<List<String>> highRiskPatterns = exceptionSpaceBuilder.generateMockingPatterns(
                 API_CALL_SEQUENCE,
                 ALL_EXCEPTION_TYPES,
@@ -130,6 +135,7 @@ public class WalletResourceAmplifiedTest {
             AtomicInteger getBalanceCallCount = new AtomicInteger(0);
             AtomicInteger updateBalanceCallCount = new AtomicInteger(0);
             AtomicInteger crossChainSwapCallCount = new AtomicInteger(0);
+            AtomicInteger exchangeCallCount = new AtomicInteger(0);
             // mock getBalance
             when(mockRepository.getBalance(anyString())).thenAnswer(inv -> {
                 getBalanceCallCount.incrementAndGet();
@@ -155,10 +161,20 @@ public class WalletResourceAmplifiedTest {
                 return null;
             }).when(mockRepository).crossChainSwap(anyString(), anyString(), anyDouble());
 
+            // mock exchangeToken
+            doAnswer(inv -> {
+                exchangeCallCount.incrementAndGet();
+                if (!"normal".equals(currentPattern.get(3))) {
+                    throw ExceptionReflectionUtils.createExceptionInstance(currentPattern.get(3), "Mocked for exchangeToken");
+                }
+                return null;
+            }).when(mockRepository).exchangeToken(anyString(), anyString(), anyDouble(), anyDouble(), anyString());
+
             try {
                 sut.deposit(TEST_TOKEN, TEST_AMOUNT);
                 sut.transfer(TEST_TOKEN, TEST_TARGET, TEST_AMOUNT);
                 sut.crossChainSwap(TEST_TOKEN, "BNB", TEST_AMOUNT);
+                sut.exchangeToken(TEST_TOKEN, "SOL", TEST_AMOUNT, TEST_FEE, TEST_NETWORK);
                 currentPatternReporter.addStat(testName, patternString + " -> All Ops OK", true);
             } catch (Exception e) {
                 String exceptionType = e.getClass().getName();

@@ -46,6 +46,20 @@ public class WalletService {
         repository.crossChainSwap(fromChain, toChain, amount);
     }
 
+    /**
+     * 兑换其他虚拟币，包含手续费和网络检查
+     */
+    public void exchangeToken(String fromChain, String toChain, double amount, double fee, String network)
+            throws SQLException, InsufficientBalanceException, RemoteApiException {
+        if (amount <= 0) {
+            throw new IllegalArgumentException("金额必须大于0");
+        }
+        if (fee < 0) {
+            throw new IllegalArgumentException("手续费不能为负数");
+        }
+        repository.exchangeToken(fromChain, toChain, amount, fee, network);
+    }
+
     public double getBalance(String chain) throws SQLException {
         return repository.getBalance(chain);
     }

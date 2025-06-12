@@ -108,6 +108,37 @@ public class WalletRepository {
         });
     }
 
+    /**
+     * 兑换虚拟币并考虑交易手续费和网络检查
+     */
+    public void exchangeToken(String fromChain, String toChain, double amount, double fee, String network)
+            throws SQLException, InsufficientBalanceException, RemoteApiException {
+        if (network == null || network.trim().isEmpty()) {
+            throw new RemoteApiException("交易网络不可用");
+        }
+        if (amount <= 0) {
+            throw new IllegalArgumentException("金额必须大于0");
+        }
+        if (fee < 0) {
+            throw new IllegalArgumentException("手续费不能为负数");
+        }
+
+        double total = amount + fee;
+        runInTransaction(conn -> {
+            try {
+                double fromBalance = getBalanceWithConnection(conn, fromChain);
+                if (fromBalance < total) {
+                    throw new InsufficientBalanceException("余额不足: " + fromBalance);
+                }
+                updateBalanceWithConnection(conn, fromChain, -total);
+                updateBalanceWithConnection(conn, toChain, amount);
+                return true;
+            } catch (SQLException | InsufficientBalanceException e) {
+                throw new RuntimeException(e);
+            }
+        });
+    }
+
     private double getBalanceWithConnection(Connection conn, String chain) throws SQLException {
         try (PreparedStatement ps = conn.prepareStatement("SELECT balance FROM account WHERE chain=?")) {
             ps.setString(1, chain);

@@ -6,6 +6,8 @@ import java.sql.SQLException;
 import java.util.HashMap;
 import java.util.Map;
 
+import edu.unl.wallet.RemoteApiException;
+
 import static org.junit.jupiter.api.Assertions.*;
 
 public class WalletResourceTest {
@@ -31,11 +33,21 @@ public class WalletResourceTest {
         resource.crossChainSwap("ETH", "BNB", 10.0);
         assertEquals(100.0, resource.getBalance("ETH"), 0.01);
         assertEquals(10.0, resource.getBalance("BNB"), 0.01);
+
+        resource.exchangeToken("ETH", "SOL", 20.0, 1.0, "mainnet");
+        assertEquals(79.0, resource.getBalance("ETH"), 0.01);
+        assertEquals(20.0, resource.getBalance("SOL"), 0.01);
     }
 
     @Test
     public void testTransferInsufficientBalance() throws SQLException {
         WalletResource resource = createResource(20.0);
         assertThrows(InsufficientBalanceException.class, () -> resource.transfer("ETH", "0xdef", 30.0));
+    }
+
+    @Test
+    public void testExchangeInvalidNetwork() throws Exception {
+        WalletResource resource = createResource(50.0);
+        assertThrows(RemoteApiException.class, () -> resource.exchangeToken("ETH", "BNB", 10.0, 1.0, ""));
     }
 }
